@@ -1,0 +1,44 @@
+.card {
+  background: #020617;
+  padding: 1.2rem;
+  border-radius: 14px;
+  border: 1px solid #1e293b;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  transition: transform 0.3s ease;
+  cursor: pointer;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+}
+
+.card:focus {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.title {
+  margin-bottom: 6px;
+  font-size: 1.1rem;
+}
+
+.description {
+  margin: 0;
+  opacity: 0.8;
+  font-size: 0.9rem;
+}
+
+.category {
+  display: inline-block;
+  background: #1e293b;
+  color: #38bdf8;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  margin-top: 0.5rem;
+}
