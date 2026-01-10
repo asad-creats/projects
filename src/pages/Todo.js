@@ -292,9 +292,7 @@ function Todo() {
 
   // Delete todo
   const deleteTodo = async (id) => {
-    if (!window.confirm('Delete this task?')) return;
-    
-    // Optimistic delete
+    // Optimistic delete with animation
     setTodos(prev => prev.filter(t => t.id !== id));
     
     try {
@@ -1471,6 +1469,17 @@ const keyframesCSS = `
     to { 
       opacity: 1; 
       transform: translateY(0); 
+    }
+  }
+
+  @keyframes fadeOut {
+    from { 
+      opacity: 1; 
+      transform: scale(1); 
+    }
+    to { 
+      opacity: 0; 
+      transform: scale(0.95); 
     }
   }
 
