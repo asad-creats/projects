@@ -1,148 +1,248 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
+/* ==================== THEME ==================== */
 const theme = {
-  bg: '#0f172a',
-  sidebar: 'rgba(15, 23, 42, 0.9)',
-  accent: '#38bdf8',
+  bg: '#0a0a0f',
+  surface: '#13131a',
+  surfaceHover: '#1a1a24',
+  accent: '#6366f1',
+  accentHover: '#4f46e5',
   success: '#10b981',
   danger: '#ef4444',
   warning: '#f59e0b',
-  text: '#f8fafc',
+  text: '#f1f5f9',
   textSecondary: '#94a3b8',
-  glass: 'rgba(255, 255, 255, 0.05)',
-  glassHover: 'rgba(255, 255, 255, 0.08)',
-  border: 'rgba(255, 255, 255, 0.1)',
-  gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  textMuted: '#64748b',
+  glass: 'rgba(99, 102, 241, 0.05)',
+  glassBorder: 'rgba(99, 102, 241, 0.1)',
+  border: 'rgba(148, 163, 184, 0.1)',
+  gradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%)',
+  gradientHover: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #c026d3 100%)',
 };
 
-/* ---------------- AI LOADER ---------------- */
+/* ==================== UTILITY FUNCTIONS ==================== */
+const formatDate = (dateString) => {
+  const date = new Date(dateString + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  const dateOnly = new Date(date);
+  dateOnly.setHours(0, 0, 0, 0);
+  
+  if (dateOnly.getTime() === today.getTime()) {
+    return 'Today';
+  } else if (dateOnly.getTime() === tomorrow.getTime()) {
+    return 'Tomorrow';
+  } else {
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  }
+};
+
+const getTodayString = () => new Date().toISOString().split('T')[0];
+
+const isOverdue = (dateString, completed) => {
+  if (completed) return false;
+  return dateString < getTodayString();
+};
+
+/* ==================== COMPONENTS ==================== */
 
 const AiLoader = () => (
   <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-    <span style={{ fontSize: '0.75rem', color: theme.accent }}>Thinking</span>
-    {[1, 2, 3].map(i => (
+    <span style={{ fontSize: '0.75rem', color: theme.accent, fontWeight: '500' }}>
+      Analyzing
+    </span>
+    {[0, 1, 2].map(i => (
       <span
         key={i}
         style={{
-          width: '6px',
-          height: '6px',
+          width: '5px',
+          height: '5px',
           background: theme.accent,
           borderRadius: '50%',
-          animation: 'aiPulse 1.2s infinite',
-          animationDelay: `${i * 0.15}s`,
+          animation: 'aiPulse 1.4s infinite',
+          animationDelay: `${i * 0.2}s`,
         }}
       />
     ))}
   </div>
 );
 
-// Insert CSS animations
-if (typeof document !== 'undefined') {
-  const sheet = document.styleSheets[0];
-  if (sheet) {
-    sheet.insertRule(`
-      @keyframes aiPulse {
-        0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-        40% { opacity: 1; transform: scale(1.2); }
-      }
-    `, sheet.cssRules.length);
+const EmptyState = ({ activeTab, onCreateTask }) => {
+  const messages = {
+    all: { icon: '📝', title: 'No tasks yet', desc: 'Create your first task to get started' },
+    today: { icon: '🌅', title: 'All clear for today', desc: 'No tasks scheduled for today' },
+    completed: { icon: '🎯', title: 'No completed tasks', desc: 'Complete some tasks to see them here' },
+    pending: { icon: '⏳', title: 'No pending tasks', desc: 'All caught up!' },
+  };
+  
+  const msg = messages[activeTab] || messages.all;
+  
+  return (
+    <div style={styles.emptyState}>
+      <div style={{ fontSize: '4rem', marginBottom: '1.5rem', opacity: 0.5 }}>
+        {msg.icon}
+      </div>
+      <h3 style={{ 
+        marginBottom: '0.5rem', 
+        fontSize: '1.25rem',
+        color: theme.text 
+      }}>
+        {msg.title}
+      </h3>
+      <p style={{ 
+        color: theme.textMuted, 
+        marginBottom: '2rem',
+        fontSize: '0.875rem'
+      }}>
+        {msg.desc}
+      </p>
+      {activeTab !== 'completed' && (
+        <button onClick={onCreateTask} style={styles.emptyStateButton}>
+          <span style={{ fontSize: '1.2rem' }}>+</span>
+          Create Task
+        </button>
+      )}
+    </div>
+  );
+};
 
-    sheet.insertRule(`
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-    `, sheet.cssRules.length);
+const StatBadge = ({ count, type }) => {
+  const getStyle = () => {
+    switch(type) {
+      case 'overdue':
+        return { bg: 'rgba(239, 68, 68, 0.1)', color: theme.danger, border: 'rgba(239, 68, 68, 0.2)' };
+      case 'today':
+        return { bg: 'rgba(99, 102, 241, 0.1)', color: theme.accent, border: 'rgba(99, 102, 241, 0.2)' };
+      default:
+        return { bg: theme.glass, color: theme.textSecondary, border: theme.glassBorder };
+    }
+  };
+  
+  const style = getStyle();
+  
+  return (
+    <span style={{
+      background: style.bg,
+      color: style.color,
+      border: `1px solid ${style.border}`,
+      fontSize: '0.7rem',
+      padding: '3px 10px',
+      borderRadius: '14px',
+      fontWeight: '600',
+      minWidth: '28px',
+      textAlign: 'center',
+      display: 'inline-block'
+    }}>
+      {count}
+    </span>
+  );
+};
 
-    sheet.insertRule(`
-      @keyframes slideIn {
-        from { transform: translateX(-10px); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-    `, sheet.cssRules.length);
-  }
-}
-
-/* ---------------- COMPONENT ---------------- */
+/* ==================== MAIN COMPONENT ==================== */
 
 function Todo() {
+  // State
   const [todos, setTodos] = useState([]);
   const [input, setInput] = useState('');
   const [date, setDate] = useState('');
   const [category, setCategory] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [loading, setLoading] = useState(true);
-
-  // AI state
   const [aiLoadingId, setAiLoadingId] = useState(null);
   const [tempSuggestions, setTempSuggestions] = useState({});
   const [hoveredTodoId, setHoveredTodoId] = useState(null);
-
-  // Edit state
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editCategory, setEditCategory] = useState('');
 
+  // Fetch todos on mount
   useEffect(() => { 
     fetchTodos(); 
   }, []);
 
-  async function fetchTodos() {
+  // Fetch todos from Supabase
+  const fetchTodos = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('todos')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) {
+    try {
+      const { data, error } = await supabase
+        .from('todos')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setTodos(data || []);
+    } catch (error) {
       console.error('Error fetching todos:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    setTodos(data || []);
-    setLoading(false);
-  }
+  };
 
+  // Add new todo
   const addTodo = async () => {
     if (!input.trim()) return;
     
-    const finalDate = date || new Date().toISOString().split('T')[0];
-    const { data, error } = await supabase
-      .from('todos')
-      .insert([{
-        text: input,
-        date: finalDate,
-        category: category || 'General',
-        completed: false,
-        notes: ''
-      }])
-      .select();
+    const finalDate = date || getTodayString();
+    
+    try {
+      const { data, error } = await supabase
+        .from('todos')
+        .insert([{
+          text: input.trim(),
+          date: finalDate,
+          category: category.trim() || 'General',
+          completed: false,
+          notes: ''
+        }])
+        .select();
 
-    if (error) {
+      if (error) throw error;
+      
+      setTodos([data[0], ...todos]);
+      setInput('');
+      setDate('');
+      setCategory('');
+      setActiveTab('all');
+    } catch (error) {
       console.error('Error adding todo:', error);
-      return;
+      alert('Failed to add task. Please try again.');
     }
-
-    setTodos([data[0], ...todos]);
-    setInput('');
-    setDate('');
-    setCategory('');
-    setActiveTab('all');
   };
 
-  const toggleTodo = async (id, currentStatus) => {
-    await supabase
-      .from('todos')
-      .update({ completed: !currentStatus })
-      .eq('id', id);
-    
-    setTodos(todos.map(t => 
+  // Toggle todo completion
+  const toggleTodo = useCallback(async (id, currentStatus) => {
+    // Optimistic update
+    setTodos(prev => prev.map(t => 
       t.id === id ? { ...t, completed: !t.completed } : t
     ));
-  };
+    
+    try {
+      const { error } = await supabase
+        .from('todos')
+        .update({ completed: !currentStatus })
+        .eq('id', id);
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error toggling todo:', error);
+      // Revert on error
+      setTodos(prev => prev.map(t => 
+        t.id === id ? { ...t, completed: currentStatus } : t
+      ));
+    }
+  }, []);
 
+  // Start editing
   const startEdit = (todo) => {
     setEditingId(todo.id);
     setEditText(todo.text);
@@ -150,68 +250,77 @@ function Todo() {
     setEditCategory(todo.category);
   };
 
+  // Save edit
   const saveEdit = async (id) => {
     if (!editText.trim()) return;
     
-    await supabase
-      .from('todos')
-      .update({ 
-        text: editText,
-        date: editDate,
-        category: editCategory
-      })
-      .eq('id', id);
-    
-    setTodos(todos.map(t => 
-      t.id === id ? { 
-        ...t, 
-        text: editText,
-        date: editDate,
-        category: editCategory
-      } : t
-    ));
-    
+    try {
+      const { error } = await supabase
+        .from('todos')
+        .update({ 
+          text: editText.trim(),
+          date: editDate,
+          category: editCategory.trim()
+        })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setTodos(todos.map(t => 
+        t.id === id ? { 
+          ...t, 
+          text: editText.trim(),
+          date: editDate,
+          category: editCategory.trim()
+        } : t
+      ));
+      
+      cancelEdit();
+    } catch (error) {
+      console.error('Error updating todo:', error);
+      alert('Failed to update task. Please try again.');
+    }
+  };
+
+  // Cancel edit
+  const cancelEdit = () => {
     setEditingId(null);
     setEditText('');
     setEditDate('');
     setEditCategory('');
   };
 
+  // Delete todo
   const deleteTodo = async (id) => {
-    if (window.confirm('Are you sure you want to delete this task?')) {
-      await supabase
+    if (!window.confirm('Delete this task?')) return;
+    
+    // Optimistic delete
+    setTodos(prev => prev.filter(t => t.id !== id));
+    
+    try {
+      const { error } = await supabase
         .from('todos')
         .delete()
         .eq('id', id);
       
-      setTodos(todos.filter(t => t.id !== id));
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error deleting todo:', error);
+      fetchTodos(); // Refetch on error
     }
   };
 
-  const saveNote = async (id, noteText) => {
-    await supabase
-      .from('todos')
-      .update({ notes: noteText })
-      .eq('id', id);
-    
-    setTodos(todos.map(t => 
-      t.id === id ? { ...t, notes: noteText } : t
-    ));
-    
-    const copy = { ...tempSuggestions };
-    delete copy[id];
-    setTempSuggestions(copy);
-  };
-
+  // Get AI suggestions
   const getAiSuggestion = async (todo) => {
     setAiLoadingId(todo.id);
+    
     try {
       const res = await fetch('http://localhost:11434/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'llama3.2',
-          prompt: `Task: "${todo.text}". Give 3 practical tips to complete this task efficiently. Use bullet points.`,
+          prompt: `Task: "${todo.text}". Provide 3 actionable, specific tips to complete this efficiently. Format as bullet points.`,
           stream: false,
         })
       });
@@ -228,209 +337,140 @@ function Todo() {
       // Fallback suggestions
       setTempSuggestions(prev => ({ 
         ...prev, 
-        [todo.id]: "• Break task into smaller steps\n• Set a deadline\n• Eliminate distractions"
+        [todo.id]: "• Break the task into smaller, manageable steps\n• Set a specific deadline and time block\n• Remove distractions and focus on one thing at a time"
       }));
     } finally {
       setAiLoadingId(null);
     }
   };
 
-  // Calculate task counts
-  const getTaskCounts = () => {
-    const today = new Date().toISOString().split('T')[0];
+  // Save AI note
+  const saveNote = async (id, noteText) => {
+    try {
+      const { error } = await supabase
+        .from('todos')
+        .update({ notes: noteText })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setTodos(todos.map(t => 
+        t.id === id ? { ...t, notes: noteText } : t
+      ));
+      
+      setTempSuggestions(prev => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+    } catch (error) {
+      console.error('Error saving note:', error);
+      alert('Failed to save notes. Please try again.');
+    }
+  };
+
+  // Discard AI suggestion
+  const discardSuggestion = (id) => {
+    setTempSuggestions(prev => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+  };
+
+  // Calculate task counts (memoized)
+  const taskCounts = useMemo(() => {
+    const today = getTodayString();
     
     return {
       all: todos.length,
       today: todos.filter(t => t.date === today && !t.completed).length,
       completed: todos.filter(t => t.completed).length,
       pending: todos.filter(t => !t.completed).length,
-      overdue: todos.filter(t => t.date < today && !t.completed).length,
+      overdue: todos.filter(t => isOverdue(t.date, t.completed)).length,
     };
-  };
+  }, [todos]);
 
-  const taskCounts = getTaskCounts();
-  const today = new Date().toISOString().split('T')[0];
-
-  const filteredTasks = () => {
-    if (activeTab === 'today') {
-      return todos.filter(t => t.date === today && !t.completed);
-    }
-    if (activeTab === 'completed') {
-      return todos.filter(t => t.completed);
-    }
-    if (activeTab === 'pending') {
-      return todos.filter(t => !t.completed);
-    }
-    return todos;
-  };
-
-  const getTabIcon = (tab) => {
-    switch(tab) {
-      case 'all': return '📋';
-      case 'today': return '📅';
-      case 'completed': return '✅';
-      case 'pending': return '⏳';
-      default: return '📁';
-    }
-  };
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+  // Filter tasks based on active tab (memoized)
+  const filteredTasks = useMemo(() => {
+    const today = getTodayString();
     
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return 'Tomorrow';
-    } else {
-      return date.toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric' 
-      });
+    switch(activeTab) {
+      case 'today':
+        return todos.filter(t => t.date === today && !t.completed);
+      case 'completed':
+        return todos.filter(t => t.completed);
+      case 'pending':
+        return todos.filter(t => !t.completed);
+      default:
+        return todos;
     }
-  };
+  }, [todos, activeTab]);
+
+  // Navigation items
+  const navItems = [
+    { id: 'all', label: 'All Tasks', icon: '📋', count: taskCounts.all },
+    { id: 'today', label: "Today", icon: '⭐', count: taskCounts.today },
+    { id: 'pending', label: 'Pending', icon: '⏳', count: taskCounts.pending },
+    { id: 'completed', label: 'Completed', icon: '✓', count: taskCounts.completed },
+  ];
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      minHeight: '100vh', 
-      background: theme.bg, 
-      color: theme.text,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    }}>
+    <div style={styles.container}>
+      <style>{keyframesCSS}</style>
+      
       {/* SIDEBAR */}
-      <aside style={{ 
-        width: '280px', 
-        background: theme.sidebar,
-        padding: '2rem 1.5rem',
-        borderRight: `1px solid ${theme.border}`,
-        backdropFilter: 'blur(10px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '2rem'
-      }}>
-        <div>
-          <h2 style={{ 
-            color: theme.accent, 
-            marginBottom: '0.5rem',
-            fontSize: '1.5rem',
-            fontWeight: '700',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem'
-          }}>
-            <span style={{ 
-              background: theme.gradient, 
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
-            }}>
-              TASKMASTER
-            </span>
-            <span style={{ 
-              fontSize: '0.75rem', 
-              background: theme.accent, 
-              color: theme.bg,
-              padding: '2px 8px',
-              borderRadius: '12px',
-              fontWeight: '600'
-            }}>
-              AI
-            </span>
+      <aside style={styles.sidebar}>
+        <div style={styles.sidebarHeader}>
+          <h2 style={styles.logo}>
+            <span style={styles.logoGradient}>TASKFLOW</span>
+            <span style={styles.logoBadge}>AI</span>
           </h2>
-          <p style={{ 
-            color: theme.textSecondary, 
-            fontSize: '0.875rem',
-            marginBottom: '2rem'
-          }}>
-            Manage your tasks with AI assistance
+          <p style={styles.logoSubtext}>
+            Smart task management
           </p>
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {[
-            { id: 'all', label: 'All Tasks', count: taskCounts.all },
-            { id: 'today', label: "Today's Tasks", count: taskCounts.today },
-            { id: 'pending', label: 'Pending', count: taskCounts.pending },
-            { id: 'completed', label: 'Completed', count: taskCounts.completed },
-          ].map(({ id, label, count }) => (
+        <nav style={styles.nav}>
+          {navItems.map(({ id, label, icon, count }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
               style={{
-                ...navStyle,
-                background: activeTab === id ? theme.glassHover : 'transparent',
-                borderLeft: activeTab === id ? `3px solid ${theme.accent}` : '3px solid transparent',
-                color: activeTab === id ? theme.accent : theme.textSecondary,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0.875rem 1rem',
+                ...styles.navButton,
+                ...(activeTab === id ? styles.navButtonActive : {}),
               }}
             >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ fontSize: '1.1rem' }}>{getTabIcon(id)}</span>
-                {label}
+              <span style={styles.navButtonContent}>
+                <span style={styles.navIcon}>{icon}</span>
+                <span>{label}</span>
               </span>
-              <span style={{
-                background: activeTab === id ? theme.accent : theme.glass,
-                color: activeTab === id ? theme.bg : theme.textSecondary,
-                fontSize: '0.75rem',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                fontWeight: '600',
-                minWidth: '24px',
-                textAlign: 'center'
-              }}>
-                {count}
-              </span>
+              <StatBadge 
+                count={count} 
+                type={id === 'today' && count > 0 ? 'today' : null}
+              />
             </button>
           ))}
         </nav>
 
-        <div style={{ marginTop: 'auto' }}>
+        <div style={styles.sidebarFooter}>
           <button 
             onClick={() => setActiveTab('add')}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: theme.gradient,
-              border: 'none',
-              borderRadius: '10px',
-              color: 'white',
-              fontWeight: '600',
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem'
-            }}
-            onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-            onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+            style={styles.createButton}
           >
-            <span style={{ fontSize: '1.1rem' }}>+</span>
-            Create New Task
+            <span style={{ fontSize: '1.2rem', fontWeight: '300' }}>+</span>
+            New Task
           </button>
           
           {taskCounts.overdue > 0 && (
-            <div style={{
-              background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-              borderRadius: '10px',
-              padding: '0.75rem',
-              marginTop: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              <span style={{ color: theme.danger }}>⚠️</span>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: theme.danger, fontWeight: '600' }}>
-                  {taskCounts.overdue} overdue task{taskCounts.overdone !== 1 ? 's' : ''}
+            <div style={styles.overdueAlert}>
+              <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+              <div style={{ flex: 1 }}>
+                <div style={styles.overdueText}>
+                  {taskCounts.overdue} overdue task{taskCounts.overdue !== 1 ? 's' : ''}
+                </div>
+                <div style={styles.overdueSubtext}>
+                  Needs attention
                 </div>
               </div>
             </div>
@@ -439,129 +479,84 @@ function Todo() {
       </aside>
 
       {/* MAIN CONTENT */}
-      <main style={{ 
-        flex: 1, 
-        padding: '3rem', 
-        overflowY: 'auto',
-        maxWidth: '1000px',
-        margin: '0 auto'
-      }}>
-        <header style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          marginBottom: '2.5rem',
-          animation: 'fadeIn 0.5s ease'
-        }}>
+      <main style={styles.main}>
+        <header style={styles.header}>
           <div>
-            <h1 style={{ 
-              fontSize: '2rem', 
-              fontWeight: '700',
-              marginBottom: '0.5rem',
-              background: theme.gradient,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              display: 'inline-block'
-            }}>
+            <h1 style={styles.pageTitle}>
               {activeTab === 'all' ? 'All Tasks' :
                activeTab === 'today' ? "Today's Tasks" :
                activeTab === 'pending' ? 'Pending Tasks' :
                activeTab === 'completed' ? 'Completed Tasks' :
                'Create New Task'}
             </h1>
-            <p style={{ 
-              color: theme.textSecondary,
-              fontSize: '0.875rem'
-            }}>
+            <p style={styles.pageSubtitle}>
               {activeTab === 'add' 
-                ? 'Add a new task to your list'
-                : `${filteredTasks().length} task${filteredTasks().length !== 1 ? 's' : ''}`}
+                ? 'Add a new task to stay organized'
+                : `${filteredTasks.length} task${filteredTasks.length !== 1 ? 's' : ''}`}
             </p>
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{
-              padding: '0.5rem 1rem',
-              background: theme.glass,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              color: theme.textSecondary
-            }}>
+          <div style={styles.headerActions}>
+            <div style={styles.dateDisplay}>
+              <span style={{ fontSize: '1rem', marginRight: '0.5rem' }}>📅</span>
               {new Date().toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
+                month: 'short', 
+                day: 'numeric',
+                year: 'numeric'
               })}
             </div>
-            <Link 
-              to="/" 
-              style={{ 
-                padding: '0.5rem 1rem',
-                background: theme.glass,
-                borderRadius: '8px',
-                color: theme.accent,
-                textDecoration: 'none',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                border: `1px solid ${theme.border}`,
-                transition: 'all 0.2s ease'
-              }}
-              onMouseEnter={(e) => e.target.style.background = theme.glassHover}
-              onMouseLeave={(e) => e.target.style.background = theme.glass}
-            >
+            <Link to="/" style={styles.logoutButton}>
               Logout
             </Link>
           </div>
         </header>
 
-        <div style={{ animation: 'slideIn 0.3s ease' }}>
+        <div style={styles.content}>
           {activeTab === 'add' ? (
-            <div style={{
-              background: theme.glass,
-              padding: '2.5rem',
-              borderRadius: '20px',
-              border: `1px solid ${theme.border}`,
-              backdropFilter: 'blur(10px)',
-              maxWidth: '600px',
-              margin: '0 auto'
-            }}>
-              <h3 style={{ 
-                marginBottom: '1.5rem', 
-                color: theme.accent,
-                fontSize: '1.25rem'
-              }}>
-                Create New Task
-              </h3>
+            /* CREATE TASK FORM */
+            <div style={styles.createForm}>
+              <h3 style={styles.formTitle}>Create New Task</h3>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <input 
-                  placeholder="What needs to be done?" 
-                  value={input} 
-                  onChange={e => setInput(e.target.value)}
-                  style={inputStyle}
-                  onKeyPress={(e) => e.key === 'Enter' && addTodo()}
-                />
+              <div style={styles.formFields}>
+                <div style={{ width: '100%' }}>
+                  <label style={styles.label}>Task Description</label>
+                  <input 
+                    placeholder="What needs to be done?" 
+                    value={input} 
+                    onChange={e => setInput(e.target.value)}
+                    style={styles.input}
+                    onKeyPress={(e) => e.key === 'Enter' && addTodo()}
+                    autoFocus
+                  />
+                </div>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={labelStyle}>Due Date</label>
+                <div style={styles.formRow}>
+                  <div style={{ width: '100%' }}>
+                    <label style={styles.label}>Due Date</label>
                     <input 
                       type="date" 
                       value={date} 
                       onChange={e => setDate(e.target.value)}
-                      style={inputStyle}
-                      min={new Date().toISOString().split('T')[0]}
+                      style={styles.input}
+                      min={getTodayString()}
                     />
                   </div>
-                  <div>
-                    <label style={labelStyle}>Category</label>
+                  <div style={{ width: '100%' }}>
+                    <label style={styles.label}>Category</label>
                     <input 
-                      placeholder="Work, Personal, etc." 
+                      placeholder="e.g., Work, Personal" 
                       value={category} 
                       onChange={e => setCategory(e.target.value)}
-                      style={inputStyle}
+                      style={styles.input}
+                      list="categories"
                     />
+                    <datalist id="categories">
+                      <option value="Work" />
+                      <option value="Personal" />
+                      <option value="Health" />
+                      <option value="Finance" />
+                      <option value="Learning" />
+                    </datalist>
                   </div>
                 </div>
                 
@@ -569,127 +564,87 @@ function Todo() {
                   onClick={addTodo}
                   disabled={!input.trim()}
                   style={{
-                    ...saveButtonStyle,
+                    ...styles.submitButton,
                     opacity: !input.trim() ? 0.5 : 1,
                     cursor: !input.trim() ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  + Add Task
+                  <span style={{ fontSize: '1.2rem' }}>+</span>
+                  Add Task
                 </button>
               </div>
             </div>
           ) : loading ? (
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              padding: '4rem',
-              color: theme.textSecondary
-            }}>
-              Loading tasks...
+            /* LOADING STATE */
+            <div style={styles.loadingState}>
+              <div style={styles.spinner} />
+              <p style={{ marginTop: '1rem', color: theme.textMuted }}>
+                Loading tasks...
+              </p>
             </div>
-          ) : filteredTasks().length === 0 ? (
-            <div style={{
-              textAlign: 'center',
-              padding: '4rem',
-              color: theme.textSecondary
-            }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📝</div>
-              <h3 style={{ marginBottom: '0.5rem' }}>No tasks found</h3>
-              <p>Get started by creating your first task!</p>
-              <button 
-                onClick={() => setActiveTab('add')}
-                style={{
-                  marginTop: '1rem',
-                  padding: '0.75rem 1.5rem',
-                  background: theme.gradient,
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: 'white',
-                  fontWeight: '500',
-                  cursor: 'pointer'
-                }}
-              >
-                Create Task
-              </button>
-            </div>
+          ) : filteredTasks.length === 0 ? (
+            /* EMPTY STATE */
+            <EmptyState 
+              activeTab={activeTab} 
+              onCreateTask={() => setActiveTab('add')}
+            />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {filteredTasks().map(todo => (
+            /* TASKS LIST */
+            <div style={styles.tasksList}>
+              {filteredTasks.map(todo => (
                 <div
                   key={todo.id}
-                  style={{ animation: 'fadeIn 0.3s ease' }}
+                  style={styles.taskWrapper}
                   onMouseEnter={() => setHoveredTodoId(todo.id)}
                   onMouseLeave={() => setHoveredTodoId(null)}
                 >
-                  {/* EDIT MODE */}
                   {editingId === todo.id ? (
-                    <div style={{
-                      background: 'rgba(56, 189, 248, 0.1)',
-                      border: `1px solid ${theme.accent}`,
-                      padding: '1.5rem',
-                      borderRadius: '12px',
-                      marginBottom: '1rem'
-                    }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <input 
-                          value={editText}
-                          onChange={e => setEditText(e.target.value)}
-                          style={inputStyle}
-                          placeholder="Edit task..."
-                          onKeyPress={(e) => e.key === 'Enter' && saveEdit(todo.id)}
-                        />
+                    /* EDIT MODE */
+                    <div style={styles.editCard}>
+                      <div style={styles.formFields}>
+                        <div style={{ width: '100%' }}>
+                          <input 
+                            value={editText}
+                            onChange={e => setEditText(e.target.value)}
+                            style={styles.input}
+                            placeholder="Edit task..."
+                            onKeyPress={(e) => e.key === 'Enter' && saveEdit(todo.id)}
+                            autoFocus
+                          />
+                        </div>
                         
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                          <div>
-                            <label style={labelStyle}>Due Date</label>
+                        <div style={styles.formRow}>
+                          <div style={{ width: '100%' }}>
+                            <label style={styles.label}>Due Date</label>
                             <input 
                               type="date" 
                               value={editDate} 
                               onChange={e => setEditDate(e.target.value)}
-                              style={inputStyle}
+                              style={styles.input}
                             />
                           </div>
-                          <div>
-                            <label style={labelStyle}>Category</label>
+                          <div style={{ width: '100%' }}>
+                            <label style={styles.label}>Category</label>
                             <input 
                               value={editCategory}
                               onChange={e => setEditCategory(e.target.value)}
-                              style={inputStyle}
+                              style={styles.input}
                               placeholder="Category"
                             />
                           </div>
                         </div>
                         
-                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <div style={styles.editActions}>
                           <button 
                             onClick={() => saveEdit(todo.id)}
                             disabled={!editText.trim()}
-                            style={{
-                              padding: '0.5rem 1rem',
-                              background: theme.success,
-                              border: 'none',
-                              borderRadius: '8px',
-                              color: 'white',
-                              fontSize: '0.75rem',
-                              fontWeight: '500',
-                              cursor: editText.trim() ? 'pointer' : 'not-allowed',
-                              opacity: editText.trim() ? 1 : 0.5
-                            }}
+                            style={styles.saveButton}
                           >
-                            Save Changes
+                            ✓ Save
                           </button>
                           <button 
-                            onClick={() => setEditingId(null)}
-                            style={{
-                              padding: '0.5rem 1rem',
-                              background: 'transparent',
-                              border: `1px solid ${theme.textSecondary}`,
-                              borderRadius: '8px',
-                              color: theme.textSecondary,
-                              fontSize: '0.75rem',
-                              fontWeight: '500',
-                              cursor: 'pointer'
-                            }}
+                            onClick={cancelEdit}
+                            style={styles.cancelButton}
                           >
                             Cancel
                           </button>
@@ -697,149 +652,85 @@ function Todo() {
                       </div>
                     </div>
                   ) : (
-                    /* TASK CARD (VIEW MODE) */
+                    /* TASK CARD */
                     <div style={{
-                      ...taskCardStyle,
-                      borderLeft: todo.completed ? `4px solid ${theme.success}` : 
-                                   todo.date < today ? `4px solid ${theme.danger}` : 
-                                   `4px solid ${theme.accent}`
+                      ...styles.taskCard,
+                      ...(hoveredTodoId === todo.id ? styles.taskCardHover : {}),
+                      borderLeft: todo.completed 
+                        ? `4px solid ${theme.success}` 
+                        : isOverdue(todo.date, todo.completed)
+                        ? `4px solid ${theme.danger}` 
+                        : `4px solid ${theme.accent}`
                     }}>
-                      <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'flex-start', 
-                        gap: '1rem',
-                        flex: 1 
-                      }}>
+                      <div style={styles.taskContent}>
                         <button
                           onClick={() => toggleTodo(todo.id, todo.completed)}
                           style={{
-                            width: '20px',
-                            height: '20px',
-                            borderRadius: '50%',
-                            border: `2px solid ${todo.completed ? theme.success : theme.textSecondary}`,
+                            ...styles.checkbox,
+                            borderColor: todo.completed ? theme.success : theme.textMuted,
                             background: todo.completed ? theme.success : 'transparent',
-                            cursor: 'pointer',
-                            flexShrink: 0,
-                            marginTop: '2px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.2s ease'
                           }}
                         >
                           {todo.completed && (
-                            <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
+                            <span style={styles.checkmark}>✓</span>
                           )}
                         </button>
                         
                         <div style={{ flex: 1 }}>
                           <div style={{ 
+                            ...styles.taskText,
                             textDecoration: todo.completed ? 'line-through' : 'none',
-                            color: todo.completed ? theme.textSecondary : theme.text,
-                            fontSize: '1rem',
-                            marginBottom: '0.25rem'
+                            color: todo.completed ? theme.textMuted : theme.text,
                           }}>
                             {todo.text}
                           </div>
                           
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '1rem',
-                            fontSize: '0.75rem',
-                            color: theme.textSecondary
-                          }}>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.25rem'
-                            }}>
+                          <div style={styles.taskMeta}>
+                            <span style={styles.taskDate}>
                               📅 {formatDate(todo.date)}
-                              {todo.date < today && !todo.completed && (
-                                <span style={{ 
-                                  color: theme.danger,
-                                  marginLeft: '0.25rem',
-                                  fontSize: '0.7rem'
-                                }}>
-                                  (Overdue)
+                              {isOverdue(todo.date, todo.completed) && (
+                                <span style={styles.overdueLabel}>
+                                  Overdue
                                 </span>
                               )}
                             </span>
                             
-                            <span style={{
-                              background: theme.glass,
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              fontSize: '0.7rem'
-                            }}>
+                            <span style={styles.taskCategory}>
                               {todo.category}
                             </span>
+                            
+                            {todo.notes && (
+                              <span style={styles.notesIndicator}>
+                                📝 Has notes
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
                       
                       {/* ACTION BUTTONS */}
-                      <div style={{ 
-                        display: 'flex', 
-                        gap: '0.5rem',
-                        alignItems: 'center'
-                      }}>
+                      <div style={styles.taskActions}>
                         <button 
                           onClick={() => getAiSuggestion(todo)}
                           disabled={aiLoadingId === todo.id}
-                          style={{
-                            ...aiButtonStyle,
-                            opacity: aiLoadingId === todo.id ? 0.7 : 1,
-                            cursor: aiLoadingId === todo.id ? 'not-allowed' : 'pointer'
-                          }}
+                          style={styles.aiButton}
+                          title="Get AI suggestions"
                         >
-                          {aiLoadingId === todo.id ? <AiLoader /> : '✨ AI Tips'}
+                          {aiLoadingId === todo.id ? <AiLoader /> : '✨ AI'}
                         </button>
                         
                         <button 
                           onClick={() => startEdit(todo)}
-                          style={{
-                            padding: '0.5rem',
-                            background: 'transparent',
-                            border: `1px solid ${theme.warning}`,
-                            color: theme.warning,
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontSize: '0.75rem',
-                            transition: 'all 0.2s ease',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '32px',
-                            height: '32px'
-                          }}
+                          style={styles.editButton}
                           title="Edit task"
-                          onMouseEnter={(e) => e.target.style.background = 'rgba(245, 158, 11, 0.1)'}
-                          onMouseLeave={(e) => e.target.style.background = 'transparent'}
                         >
                           ✏️
                         </button>
                         
                         <button 
                           onClick={() => deleteTodo(todo.id)}
-                          style={{
-                            padding: '0.5rem',
-                            background: 'transparent',
-                            border: `1px solid ${theme.danger}`,
-                            color: theme.danger,
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontSize: '0.75rem',
-                            transition: 'all 0.2s ease',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '32px',
-                            height: '32px'
-                          }}
+                          style={styles.deleteButton}
                           title="Delete task"
-                          onMouseEnter={(e) => e.target.style.background = 'rgba(239, 68, 68, 0.1)'}
-                          onMouseLeave={(e) => e.target.style.background = 'transparent'}
                         >
                           🗑️
                         </button>
@@ -847,72 +738,42 @@ function Todo() {
                     </div>
                   )}
 
-                  {/* TEMP AI SUGGESTIONS */}
+                  {/* AI SUGGESTIONS */}
                   {tempSuggestions[todo.id] && (
-                    <div style={tempBoxStyle}>
-                      <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between',
-                        marginBottom: '0.75rem' 
-                      }}>
-                        <div style={{ 
-                          fontSize: '0.75rem', 
-                          color: theme.accent, 
-                          fontWeight: '600',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem'
-                        }}>
-                          <span>🤖</span>
-                          AI SUGGESTIONS
+                    <div style={styles.suggestionsBox}>
+                      <div style={styles.suggestionsHeader}>
+                        <div style={styles.suggestionsTitle}>
+                          <span style={{ fontSize: '1rem' }}>🤖</span>
+                          AI Suggestions
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: theme.textSecondary }}>
-                          Click save to add to notes
+                        <div style={styles.suggestionsHint}>
+                          Review and save to notes
                         </div>
                       </div>
                       
-                      <div style={{
-                        background: 'rgba(56, 189, 248, 0.05)',
-                        padding: '1rem',
-                        borderRadius: '8px',
-                        marginBottom: '1rem'
-                      }}>
-                        <ul style={{ 
-                          margin: 0, 
-                          paddingLeft: '1.2rem', 
-                          fontSize: '0.85rem',
-                          lineHeight: '1.6'
-                        }}>
+                      <div style={styles.suggestionsContent}>
+                        <ul style={styles.suggestionsList}>
                           {tempSuggestions[todo.id]
                             .split('\n')
                             .filter(Boolean)
                             .map((line, i) => (
-                              <li key={i} style={{ marginBottom: '0.5rem' }}>
+                              <li key={i}>
                                 {line.replace(/^[-•*]\s*/, '')}
                               </li>
                             ))}
                         </ul>
                       </div>
                       
-                      <div style={{ 
-                        display: 'flex', 
-                        gap: '0.5rem',
-                        justifyContent: 'flex-end'
-                      }}>
+                      <div style={styles.suggestionsActions}>
                         <button 
                           onClick={() => saveNote(todo.id, tempSuggestions[todo.id])}
-                          style={confirmBtn}
+                          style={styles.saveNoteButton}
                         >
                           💾 Save to Notes
                         </button>
                         <button 
-                          onClick={() => {
-                            const updated = { ...tempSuggestions };
-                            delete updated[todo.id];
-                            setTempSuggestions(updated);
-                          }}
-                          style={cancelBtn}
+                          onClick={() => discardSuggestion(todo.id)}
+                          style={styles.discardButton}
                         >
                           Discard
                         </button>
@@ -920,28 +781,14 @@ function Todo() {
                     </div>
                   )}
 
-                  {/* SAVED NOTES (HOVER TO VIEW) */}
+                  {/* SAVED NOTES */}
                   {todo.notes && hoveredTodoId === todo.id && !tempSuggestions[todo.id] && (
-                    <div style={noteBoxStyle}>
-                      <div style={{ 
-                        fontSize: '0.75rem', 
-                        color: theme.success, 
-                        fontWeight: '600',
-                        marginBottom: '0.75rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem'
-                      }}>
-                        <span>📝</span>
-                        SAVED NOTES
+                    <div style={styles.notesBox}>
+                      <div style={styles.notesTitle}>
+                        <span style={{ fontSize: '1rem' }}>📝</span>
+                        Saved Notes
                       </div>
-                      <ul style={{ 
-                        margin: 0, 
-                        paddingLeft: '1.2rem', 
-                        fontSize: '0.85rem',
-                        lineHeight: '1.6',
-                        color: theme.textSecondary
-                      }}>
+                      <ul style={styles.notesList}>
                         {todo.notes.split('\n').filter(Boolean).map((line, i) => (
                           <li key={i}>{line.replace(/^[-•*]\s*/, '')}</li>
                         ))}
@@ -958,165 +805,715 @@ function Todo() {
   );
 }
 
-/* ---------------- UPDATED STYLES ---------------- */
+/* ==================== STYLES ==================== */
 
-const navStyle = {
-  border: 'none',
-  textAlign: 'left',
-  fontSize: '0.875rem',
-  cursor: 'pointer',
-  borderRadius: '8px',
-  transition: 'all 0.2s ease',
-  fontFamily: 'inherit'
-};
-
-const taskCardStyle = {
-  background: theme.glass,
-  padding: '1.25rem',
-  borderRadius: '12px',
-  border: `1px solid ${theme.border}`,
-  backdropFilter: 'blur(10px)',
-  transition: 'all 0.2s ease',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: '1rem'
-};
-
-const inputStyle = {
-  width: '100%',
-  padding: '0.875rem 1rem',
-  background: 'rgba(30, 41, 59, 0.5)',
-  border: `1px solid ${theme.border}`,
-  borderRadius: '10px',
-  color: theme.text,
-  fontSize: '0.875rem',
-  transition: 'all 0.2s ease',
-  fontFamily: 'inherit'
-};
-
-const labelStyle = {
-  display: 'block',
-  marginBottom: '0.5rem',
-  fontSize: '0.75rem',
-  color: theme.textSecondary,
-  fontWeight: '500'
-};
-
-const saveButtonStyle = {
-  width: '100%',
-  padding: '0.875rem',
-  background: theme.gradient,
-  border: 'none',
-  borderRadius: '10px',
-  color: 'white',
-  fontWeight: '600',
-  fontSize: '0.875rem',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-  fontFamily: 'inherit'
-};
-
-const aiButtonStyle = {
-  background: 'rgba(56, 189, 248, 0.1)',
-  color: theme.accent,
-  border: `1px solid ${theme.accent}`,
-  padding: '0.5rem 1rem',
-  borderRadius: '8px',
-  fontSize: '0.75rem',
-  fontWeight: '500',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-  whiteSpace: 'nowrap',
-  fontFamily: 'inherit'
-};
-
-const tempBoxStyle = {
-  background: 'rgba(56, 189, 248, 0.05)',
-  border: `1px solid rgba(56, 189, 248, 0.3)`,
-  padding: '1.25rem',
-  borderRadius: '12px',
-  marginTop: '0.5rem',
-  marginLeft: '2.5rem',
-  animation: 'fadeIn 0.3s ease'
-};
-
-const noteBoxStyle = {
-  background: 'rgba(16, 185, 129, 0.05)',
-  border: `1px solid rgba(16, 185, 129, 0.3)`,
-  padding: '1.25rem',
-  borderRadius: '12px',
-  marginTop: '0.5rem',
-  marginLeft: '2.5rem',
-  animation: 'fadeIn 0.2s ease'
-};
-
-const confirmBtn = {
-  background: theme.success,
-  border: 'none',
-  color: 'white',
-  padding: '0.5rem 1rem',
-  borderRadius: '8px',
-  fontSize: '0.75rem',
-  fontWeight: '500',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.25rem',
-  fontFamily: 'inherit'
-};
-
-const cancelBtn = {
-  background: 'transparent',
-  border: `1px solid ${theme.textSecondary}`,
-  color: theme.textSecondary,
-  padding: '0.5rem 1rem',
-  borderRadius: '8px',
-  fontSize: '0.75rem',
-  fontWeight: '500',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
-  fontFamily: 'inherit'
-};
-
-// Add hover effects
-Object.assign(inputStyle, {
-  ':hover': { borderColor: theme.accent },
-  ':focus': { 
-    outline: 'none', 
-    borderColor: theme.accent,
-    boxShadow: `0 0 0 2px ${theme.accent}20`
-  }
-});
-
-Object.assign(taskCardStyle, {
-  ':hover': { 
-    background: theme.glassHover,
-    transform: 'translateY(-2px)',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-  }
-});
-
-Object.assign(aiButtonStyle, {
-  ':hover': { 
-    background: 'rgba(56, 189, 248, 0.2)',
-    transform: 'translateY(-1px)'
-  }
-});
-
-Object.assign(confirmBtn, {
-  ':hover': { 
-    background: '#0da271',
-    transform: 'translateY(-1px)'
-  }
-});
-
-Object.assign(cancelBtn, {
-  ':hover': { 
+const styles = {
+  container: {
+    display: 'flex',
+    minHeight: '100vh',
+    background: theme.bg,
+    color: theme.text,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Roboto, sans-serif',
+  },
+  
+  /* Sidebar */
+  sidebar: {
+    width: '280px',
+    background: theme.surface,
+    padding: '2rem 1.5rem',
+    borderRight: `1px solid ${theme.border}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2rem',
+    position: 'sticky',
+    top: 0,
+    height: '100vh',
+    overflowY: 'auto',
+  },
+  
+  sidebarHeader: {
+    paddingBottom: '1rem',
+    borderBottom: `1px solid ${theme.border}`,
+  },
+  
+  logo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    marginBottom: '0.5rem',
+    fontSize: '1.5rem',
+    fontWeight: '700',
+    letterSpacing: '-0.02em',
+  },
+  
+  logoGradient: {
+    background: theme.gradient,
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+  },
+  
+  logoBadge: {
+    fontSize: '0.65rem',
+    background: theme.gradient,
+    color: 'white',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    fontWeight: '700',
+    letterSpacing: '0.05em',
+  },
+  
+  logoSubtext: {
+    color: theme.textMuted,
+    fontSize: '0.8rem',
+    fontWeight: '400',
+  },
+  
+  nav: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+  },
+  
+  navButton: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '0.875rem 1rem',
+    background: 'transparent',
+    border: 'none',
+    borderLeft: '3px solid transparent',
+    borderRadius: '0 8px 8px 0',
+    color: theme.textSecondary,
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+  },
+  
+  navButtonActive: {
     background: theme.glass,
-    transform: 'translateY(-1px)'
+    borderLeftColor: theme.accent,
+    color: theme.accent,
+  },
+  
+  navButtonContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+  },
+  
+  navIcon: {
+    fontSize: '1.1rem',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  
+  sidebarFooter: {
+    marginTop: 'auto',
+    paddingTop: '1rem',
+    borderTop: `1px solid ${theme.border}`,
+  },
+  
+  createButton: {
+    width: '100%',
+    padding: '0.875rem 1rem',
+    background: theme.gradient,
+    border: 'none',
+    borderRadius: '10px',
+    color: 'white',
+    fontWeight: '600',
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.5rem',
+    fontFamily: 'inherit',
+    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)',
+  },
+  
+  overdueAlert: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    background: 'rgba(239, 68, 68, 0.1)',
+    border: `1px solid rgba(239, 68, 68, 0.2)`,
+    borderRadius: '10px',
+    padding: '0.875rem',
+    marginTop: '1rem',
+  },
+  
+  overdueText: {
+    fontSize: '0.8rem',
+    color: theme.danger,
+    fontWeight: '600',
+  },
+  
+  overdueSubtext: {
+    fontSize: '0.7rem',
+    color: theme.textMuted,
+    marginTop: '2px',
+  },
+  
+  /* Main Content */
+  main: {
+    flex: 1,
+    padding: '3rem',
+    overflowY: 'auto',
+    maxWidth: '1200px',
+    margin: '0 auto',
+    width: '100%',
+  },
+  
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '2.5rem',
+    animation: 'fadeIn 0.5s ease',
+  },
+  
+  pageTitle: {
+    fontSize: '2rem',
+    fontWeight: '700',
+    marginBottom: '0.5rem',
+    letterSpacing: '-0.02em',
+    background: theme.gradient,
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+    display: 'inline-block',
+  },
+  
+  pageSubtitle: {
+    color: theme.textMuted,
+    fontSize: '0.875rem',
+    fontWeight: '400',
+  },
+  
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+  },
+  
+  dateDisplay: {
+    padding: '0.5rem 1rem',
+    background: theme.glass,
+    border: `1px solid ${theme.glassBorder}`,
+    borderRadius: '8px',
+    fontSize: '0.875rem',
+    color: theme.textSecondary,
+    fontWeight: '500',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  
+  logoutButton: {
+    padding: '0.5rem 1rem',
+    background: 'transparent',
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.accent,
+    textDecoration: 'none',
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    transition: 'all 0.2s ease',
+    display: 'inline-block',
+  },
+  
+  content: {
+    animation: 'slideIn 0.3s ease',
+  },
+  
+  /* Create Form */
+  createForm: {
+    background: theme.surface,
+    padding: '2.5rem',
+    borderRadius: '16px',
+    border: `1px solid ${theme.border}`,
+    maxWidth: '600px',
+    margin: '0 auto',
+    boxShadow: '0 4px 24px rgba(0, 0, 0, 0.2)',
+  },
+  
+  formTitle: {
+    marginBottom: '2rem',
+    color: theme.accent,
+    fontSize: '1.25rem',
+    fontWeight: '600',
+  },
+  
+  formFields: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1.5rem',
+  },
+  
+  formRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '1rem',
+  },
+  
+  label: {
+    display: 'block',
+    marginBottom: '0.5rem',
+    fontSize: '0.8rem',
+    color: theme.textSecondary,
+    fontWeight: '500',
+    letterSpacing: '0.01em',
+  },
+  
+  input: {
+    width: '100%',
+    padding: '0.875rem 1rem',
+    background: theme.bg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '10px',
+    color: theme.text,
+    fontSize: '0.875rem',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+    outline: 'none',
+    boxSizing: 'border-box',
+  },
+  
+  submitButton: {
+    width: '100%',
+    padding: '1rem',
+    background: theme.gradient,
+    border: 'none',
+    borderRadius: '10px',
+    color: 'white',
+    fontWeight: '600',
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    fontFamily: 'inherit',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.5rem',
+    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+  },
+  
+  /* Loading & Empty States */
+  loadingState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '4rem',
+  },
+  
+  spinner: {
+    width: '40px',
+    height: '40px',
+    border: `3px solid ${theme.border}`,
+    borderTop: `3px solid ${theme.accent}`,
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  
+  emptyState: {
+    textAlign: 'center',
+    padding: '4rem 2rem',
+  },
+  
+  emptyStateButton: {
+    padding: '0.875rem 1.5rem',
+    background: theme.gradient,
+    border: 'none',
+    borderRadius: '10px',
+    color: 'white',
+    fontWeight: '600',
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    fontFamily: 'inherit',
+    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+  },
+  
+  /* Tasks List */
+  tasksList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem',
+  },
+  
+  taskWrapper: {
+    animation: 'fadeIn 0.3s ease',
+  },
+  
+  taskCard: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1rem',
+    background: theme.surface,
+    padding: '1.25rem',
+    borderRadius: '12px',
+    border: `1px solid ${theme.border}`,
+    transition: 'all 0.2s ease',
+  },
+  
+  taskCardHover: {
+    background: theme.surfaceHover,
+    transform: 'translateY(-2px)',
+    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
+  },
+  
+  taskContent: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '1rem',
+    flex: 1,
+  },
+  
+  checkbox: {
+    width: '22px',
+    height: '22px',
+    borderRadius: '50%',
+    border: '2px solid',
+    background: 'transparent',
+    cursor: 'pointer',
+    flexShrink: 0,
+    marginTop: '2px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    padding: 0,
+  },
+  
+  checkmark: {
+    color: 'white',
+    fontSize: '13px',
+    fontWeight: '700',
+  },
+  
+  taskText: {
+    fontSize: '1rem',
+    marginBottom: '0.5rem',
+    lineHeight: '1.5',
+    fontWeight: '500',
+  },
+  
+  taskMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+    fontSize: '0.75rem',
+    color: theme.textMuted,
+    flexWrap: 'wrap',
+  },
+  
+  taskDate: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.25rem',
+  },
+  
+  overdueLabel: {
+    color: theme.danger,
+    marginLeft: '0.5rem',
+    fontWeight: '600',
+  },
+  
+  taskCategory: {
+    background: theme.glass,
+    border: `1px solid ${theme.glassBorder}`,
+    padding: '3px 10px',
+    borderRadius: '12px',
+    fontSize: '0.7rem',
+    fontWeight: '500',
+  },
+  
+  notesIndicator: {
+    color: theme.success,
+    fontWeight: '500',
+  },
+  
+  taskActions: {
+    display: 'flex',
+    gap: '0.5rem',
+    alignItems: 'center',
+  },
+  
+  aiButton: {
+    padding: '0.5rem 1rem',
+    background: theme.glass,
+    border: `1px solid ${theme.glassBorder}`,
+    color: theme.accent,
+    borderRadius: '8px',
+    fontSize: '0.75rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap',
+    fontFamily: 'inherit',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.25rem',
+  },
+  
+  editButton: {
+    padding: '0.5rem',
+    background: 'transparent',
+    border: `1px solid ${theme.warning}`,
+    color: theme.warning,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '0.875rem',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '36px',
+    height: '36px',
+  },
+  
+  deleteButton: {
+    padding: '0.5rem',
+    background: 'transparent',
+    border: `1px solid ${theme.danger}`,
+    color: theme.danger,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '0.875rem',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '36px',
+    height: '36px',
+  },
+  
+  /* Edit Card */
+  editCard: {
+    background: 'rgba(99, 102, 241, 0.05)',
+    border: `1px solid ${theme.accent}`,
+    padding: '1.5rem',
+    borderRadius: '12px',
+  },
+  
+  editActions: {
+    display: 'flex',
+    gap: '0.5rem',
+    justifyContent: 'flex-end',
+  },
+  
+  saveButton: {
+    padding: '0.625rem 1.25rem',
+    background: theme.success,
+    border: 'none',
+    borderRadius: '8px',
+    color: 'white',
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+  },
+  
+  cancelButton: {
+    padding: '0.625rem 1.25rem',
+    background: 'transparent',
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.textSecondary,
+    fontSize: '0.8rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+  },
+  
+  /* AI Suggestions Box */
+  suggestionsBox: {
+    background: 'rgba(99, 102, 241, 0.05)',
+    border: `1px solid ${theme.glassBorder}`,
+    padding: '1.25rem',
+    borderRadius: '12px',
+    marginTop: '0.5rem',
+    marginLeft: '3rem',
+    animation: 'fadeIn 0.3s ease',
+  },
+  
+  suggestionsHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '1rem',
+  },
+  
+  suggestionsTitle: {
+    fontSize: '0.8rem',
+    color: theme.accent,
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+  },
+  
+  suggestionsHint: {
+    fontSize: '0.7rem',
+    color: theme.textMuted,
+  },
+  
+  suggestionsContent: {
+    background: 'rgba(99, 102, 241, 0.03)',
+    padding: '1rem',
+    borderRadius: '8px',
+    marginBottom: '1rem',
+  },
+  
+  suggestionsList: {
+    margin: 0,
+    paddingLeft: '1.5rem',
+    fontSize: '0.875rem',
+    lineHeight: '1.7',
+    color: theme.textSecondary,
+  },
+  
+  suggestionsActions: {
+    display: 'flex',
+    gap: '0.5rem',
+    justifyContent: 'flex-end',
+  },
+  
+  saveNoteButton: {
+    padding: '0.5rem 1rem',
+    background: theme.success,
+    border: 'none',
+    color: 'white',
+    borderRadius: '8px',
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.25rem',
+    fontFamily: 'inherit',
+  },
+  
+  discardButton: {
+    padding: '0.5rem 1rem',
+    background: 'transparent',
+    border: `1px solid ${theme.border}`,
+    color: theme.textSecondary,
+    borderRadius: '8px',
+    fontSize: '0.75rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+  },
+  
+  /* Saved Notes Box */
+  notesBox: {
+    background: 'rgba(16, 185, 129, 0.05)',
+    border: `1px solid rgba(16, 185, 129, 0.2)`,
+    padding: '1.25rem',
+    borderRadius: '12px',
+    marginTop: '0.5rem',
+    marginLeft: '3rem',
+    animation: 'fadeIn 0.2s ease',
+  },
+  
+  notesTitle: {
+    fontSize: '0.8rem',
+    color: theme.success,
+    fontWeight: '600',
+    marginBottom: '1rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+  },
+  
+  notesList: {
+    margin: 0,
+    paddingLeft: '1.5rem',
+    fontSize: '0.875rem',
+    lineHeight: '1.7',
+    color: theme.textMuted,
+  },
+};
+
+/* ==================== CSS KEYFRAMES ==================== */
+
+const keyframesCSS = `
+  @keyframes aiPulse {
+    0%, 80%, 100% { 
+      opacity: 0.3; 
+      transform: scale(0.8); 
+    }
+    40% { 
+      opacity: 1; 
+      transform: scale(1.3); 
+    }
   }
-});
+
+  @keyframes fadeIn {
+    from { 
+      opacity: 0; 
+      transform: translateY(10px); 
+    }
+    to { 
+      opacity: 1; 
+      transform: translateY(0); 
+    }
+  }
+
+  @keyframes slideIn {
+    from { 
+      transform: translateX(-10px); 
+      opacity: 0; 
+    }
+    to { 
+      transform: translateX(0); 
+      opacity: 1; 
+    }
+  }
+
+  @keyframes spin {
+    to { 
+      transform: rotate(360deg); 
+    }
+  }
+
+  button:hover {
+    transform: translateY(-1px);
+  }
+
+  button:active {
+    transform: translateY(0);
+  }
+
+  input:focus {
+    border-color: ${theme.accent};
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  }
+
+  .${styles.createButton.constructor.name}:hover {
+    background: ${theme.gradientHover};
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
+  }
+
+  .${styles.navButton.constructor.name}:hover {
+    background: ${theme.glass};
+    color: ${theme.accent};
+  }
+`;
 
 export default Todo;
