@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
@@ -20,6 +20,8 @@ const theme = {
   border: 'rgba(148, 163, 184, 0.1)',
   gradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%)',
   gradientHover: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #c026d3 100%)',
+  agentBg: 'rgba(139, 92, 246, 0.08)',
+  agentBorder: 'rgba(139, 92, 246, 0.2)',
 };
 
 /* ==================== UTILITY FUNCTIONS ==================== */
@@ -29,20 +31,15 @@ const formatDate = (dateString) => {
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  
   const dateOnly = new Date(date);
   dateOnly.setHours(0, 0, 0, 0);
-  
+
   if (dateOnly.getTime() === today.getTime()) {
     return 'Today';
   } else if (dateOnly.getTime() === tomorrow.getTime()) {
     return 'Tomorrow';
   } else {
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric' 
-    });
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   }
 };
 
@@ -53,132 +50,522 @@ const isOverdue = (dateString, completed) => {
   return dateString < getTodayString();
 };
 
-/* ==================== COMPONENTS ==================== */
+/* ==================== OLLAMA INTEGRATION ==================== */
 
-const AiLoader = () => (
-  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-    <span style={{ fontSize: '0.75rem', color: theme.accent, fontWeight: '500' }}>
-      Analyzing
-    </span>
-    {[0, 1, 2].map(i => (
-      <span
-        key={i}
-        style={{
-          width: '5px',
-          height: '5px',
-          background: theme.accent,
-          borderRadius: '50%',
-          animation: 'aiPulse 1.4s infinite',
-          animationDelay: `${i * 0.2}s`,
-        }}
-      />
-    ))}
-  </div>
-);
+// Ollama API client
+class OllamaClient {
+  constructor(baseUrl = 'http://localhost:11434') {
+    this.baseUrl = baseUrl;
+  }
 
-const EmptyState = ({ activeTab, onCreateTask }) => {
-  const messages = {
-    all: { icon: '📝', title: 'No tasks yet', desc: 'Create your first task to get started' },
-    today: { icon: '🌅', title: 'All clear for today', desc: 'No tasks scheduled for today' },
-    completed: { icon: '🎯', title: 'No completed tasks', desc: 'Complete some tasks to see them here' },
-    pending: { icon: '⏳', title: 'No pending tasks', desc: 'All caught up!' },
-  };
-  
-  const msg = messages[activeTab] || messages.all;
-  
-  return (
-    <div style={styles.emptyState}>
-      <div style={{ fontSize: '4rem', marginBottom: '1.5rem', opacity: 0.5 }}>
-        {msg.icon}
-      </div>
-      <h3 style={{ 
-        marginBottom: '0.5rem', 
-        fontSize: '1.25rem',
-        color: theme.text 
-      }}>
-        {msg.title}
-      </h3>
-      <p style={{ 
-        color: theme.textMuted, 
-        marginBottom: '2rem',
-        fontSize: '0.875rem'
-      }}>
-        {msg.desc}
-      </p>
-      {activeTab !== 'completed' && (
-        <button onClick={onCreateTask} style={styles.emptyStateButton}>
-          <span style={{ fontSize: '1.2rem' }}>+</span>
-          Create Task
-        </button>
-      )}
-    </div>
-  );
-};
+  async chat(messages, model = 'llama3.2', options = {}) {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: false,
+          ...options
+        })
+      });
 
-const StatBadge = ({ count, type }) => {
-  const getStyle = () => {
-    switch(type) {
-      case 'overdue':
-        return { bg: 'rgba(239, 68, 68, 0.1)', color: theme.danger, border: 'rgba(239, 68, 68, 0.2)' };
-      case 'today':
-        return { bg: 'rgba(99, 102, 241, 0.1)', color: theme.accent, border: 'rgba(99, 102, 241, 0.2)' };
-      default:
-        return { bg: theme.glass, color: theme.textSecondary, border: theme.glassBorder };
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.message.content;
+    } catch (error) {
+      console.error('Ollama chat error:', error);
+      throw error;
     }
-  };
-  
-  const style = getStyle();
-  
-  return (
-    <span style={{
-      background: style.bg,
-      color: style.color,
-      border: `1px solid ${style.border}`,
-      fontSize: '0.7rem',
-      padding: '3px 10px',
-      borderRadius: '14px',
-      fontWeight: '600',
-      minWidth: '28px',
-      textAlign: 'center',
-      display: 'inline-block'
-    }}>
-      {count}
-    </span>
-  );
-};
+  }
+
+  async listModels() {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/tags`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch models');
+      }
+      const data = await response.json();
+      return data.models || [];
+    } catch (error) {
+      console.error('Error listing models:', error);
+      return [];
+    }
+  }
+}
+
+/* ==================== AGENT SYSTEM WITH OLLAMA ==================== */
+
+class TaskAgent {
+  constructor(todos, setTodos, addTodo, toggleTodo, deleteTodo, ollamaModel = 'llama3.2') {
+    this.todos = todos;
+    this.setTodos = setTodos;
+    this.addTodo = addTodo;
+    this.toggleTodo = toggleTodo;
+    this.deleteTodo = deleteTodo;
+    this.ollama = new OllamaClient();
+    this.model = ollamaModel;
+    
+    // Define available tools the agent can use
+    this.tools = [
+      {
+        name: 'list_tasks',
+        description: 'List all tasks with optional filters (completed, pending, overdue, today)',
+        parameters: {
+          type: 'object',
+          properties: {
+            filter: {
+              type: 'string',
+              enum: ['all', 'completed', 'pending', 'overdue', 'today'],
+              description: 'Filter to apply to tasks'
+            }
+          }
+        }
+      },
+      {
+        name: 'create_task',
+        description: 'Create a new task with text, date, and category',
+        parameters: {
+          type: 'object',
+          properties: {
+            text: { type: 'string', description: 'Task description' },
+            date: { type: 'string', description: 'Due date in YYYY-MM-DD format' },
+            category: { type: 'string', description: 'Task category' }
+          },
+          required: ['text']
+        }
+      },
+      {
+        name: 'complete_task',
+        description: 'Mark a task as completed by its ID or description',
+        parameters: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'number', description: 'Task ID' },
+            taskText: { type: 'string', description: 'Task description to match' }
+          }
+        }
+      },
+      {
+        name: 'delete_task',
+        description: 'Delete a task by its ID or description',
+        parameters: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'number', description: 'Task ID' },
+            taskText: { type: 'string', description: 'Task description to match' }
+          }
+        }
+      },
+      {
+        name: 'analyze_productivity',
+        description: 'Analyze task completion patterns and provide insights',
+        parameters: {
+          type: 'object',
+          properties: {
+            period: { 
+              type: 'string', 
+              enum: ['today', 'week', 'all'],
+              description: 'Time period to analyze' 
+            }
+          }
+        }
+      },
+      {
+        name: 'suggest_priorities',
+        description: 'Suggest which tasks should be prioritized based on due dates and completion status',
+        parameters: {
+          type: 'object',
+          properties: {}
+        }
+      }
+    ];
+  }
+
+  // Tool implementations
+  async executeTool(toolName, args) {
+    switch(toolName) {
+      case 'list_tasks':
+        return this.listTasks(args.filter || 'all');
+      
+      case 'create_task':
+        return this.createTask(args.text, args.date, args.category);
+      
+      case 'complete_task':
+        return this.completeTask(args.taskId, args.taskText);
+      
+      case 'delete_task':
+        return this.deleteTask(args.taskId, args.taskText);
+      
+      case 'analyze_productivity':
+        return this.analyzeProductivity(args.period || 'all');
+      
+      case 'suggest_priorities':
+        return this.suggestPriorities();
+      
+      default:
+        return { error: `Unknown tool: ${toolName}` };
+    }
+  }
+
+  listTasks(filter) {
+    const today = getTodayString();
+    let filtered = [...this.todos];
+
+    switch(filter) {
+      case 'completed':
+        filtered = this.todos.filter(t => t.completed);
+        break;
+      case 'pending':
+        filtered = this.todos.filter(t => !t.completed);
+        break;
+      case 'overdue':
+        filtered = this.todos.filter(t => isOverdue(t.date, t.completed));
+        break;
+      case 'today':
+        filtered = this.todos.filter(t => t.date === today && !t.completed);
+        break;
+    }
+
+    return {
+      success: true,
+      count: filtered.length,
+      tasks: filtered.map(t => ({
+        id: t.id,
+        text: t.text,
+        date: t.date,
+        category: t.category,
+        completed: t.completed,
+        isOverdue: isOverdue(t.date, t.completed)
+      }))
+    };
+  }
+
+  async createTask(text, date, category) {
+    const finalDate = date || getTodayString();
+    const finalCategory = category || 'General';
+    
+    try {
+      await this.addTodo(text, finalDate, finalCategory);
+      return {
+        success: true,
+        message: `Created task: "${text}" due ${formatDate(finalDate)} in ${finalCategory}`
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async completeTask(taskId, taskText) {
+    let task = null;
+    
+    if (taskId) {
+      task = this.todos.find(t => t.id === taskId);
+    } else if (taskText) {
+      task = this.todos.find(t => 
+        t.text.toLowerCase().includes(taskText.toLowerCase())
+      );
+    }
+
+    if (!task) {
+      return { success: false, error: 'Task not found' };
+    }
+
+    if (task.completed) {
+      return { success: false, error: 'Task already completed' };
+    }
+
+    await this.toggleTodo(task.id, task.completed);
+    return {
+      success: true,
+      message: `Completed task: "${task.text}"`
+    };
+  }
+
+  async deleteTask(taskId, taskText) {
+    let task = null;
+    
+    if (taskId) {
+      task = this.todos.find(t => t.id === taskId);
+    } else if (taskText) {
+      task = this.todos.find(t => 
+        t.text.toLowerCase().includes(taskText.toLowerCase())
+      );
+    }
+
+    if (!task) {
+      return { success: false, error: 'Task not found' };
+    }
+
+    await this.deleteTodo(task.id);
+    return {
+      success: true,
+      message: `Deleted task: "${task.text}"`
+    };
+  }
+
+  analyzeProductivity(period) {
+    const today = getTodayString();
+    let filtered = this.todos;
+
+    if (period === 'today') {
+      filtered = this.todos.filter(t => t.date === today);
+    } else if (period === 'week') {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const weekAgoStr = weekAgo.toISOString().split('T')[0];
+      filtered = this.todos.filter(t => t.date >= weekAgoStr);
+    }
+
+    const total = filtered.length;
+    const completed = filtered.filter(t => t.completed).length;
+    const pending = total - completed;
+    const overdue = filtered.filter(t => isOverdue(t.date, t.completed)).length;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    const categories = {};
+    filtered.forEach(t => {
+      if (!categories[t.category]) {
+        categories[t.category] = { total: 0, completed: 0 };
+      }
+      categories[t.category].total++;
+      if (t.completed) categories[t.category].completed++;
+    });
+
+    return {
+      success: true,
+      period,
+      stats: {
+        total,
+        completed,
+        pending,
+        overdue,
+        completionRate: `${completionRate}%`
+      },
+      categories,
+      insights: this.generateInsights(total, completed, overdue, completionRate)
+    };
+  }
+
+  generateInsights(total, completed, overdue, rate) {
+    const insights = [];
+    
+    if (rate >= 80) {
+      insights.push('🎉 Excellent productivity! You\'re crushing your tasks.');
+    } else if (rate >= 60) {
+      insights.push('👍 Good progress! Keep up the momentum.');
+    } else if (rate >= 40) {
+      insights.push('📈 Room for improvement. Focus on completing pending tasks.');
+    } else if (total > 0) {
+      insights.push('⚠️ Low completion rate. Consider breaking tasks into smaller pieces.');
+    }
+
+    if (overdue > 0) {
+      insights.push(`⏰ You have ${overdue} overdue task${overdue > 1 ? 's' : ''}. Prioritize these!`);
+    }
+
+    if (total === 0) {
+      insights.push('📝 No tasks yet. Start by adding your first task!');
+    }
+
+    return insights;
+  }
+
+  suggestPriorities() {
+    const today = getTodayString();
+    const pending = this.todos.filter(t => !t.completed);
+    const overdue = pending.filter(t => isOverdue(t.date, t.completed));
+    const dueToday = pending.filter(t => t.date === today);
+    const upcoming = pending.filter(t => t.date > today);
+
+    const priorities = [];
+
+    if (overdue.length > 0) {
+      priorities.push({
+        priority: 'HIGH',
+        reason: 'Overdue tasks',
+        tasks: overdue.map(t => ({ id: t.id, text: t.text, date: t.date }))
+      });
+    }
+
+    if (dueToday.length > 0) {
+      priorities.push({
+        priority: 'MEDIUM',
+        reason: 'Due today',
+        tasks: dueToday.map(t => ({ id: t.id, text: t.text, date: t.date }))
+      });
+    }
+
+    if (upcoming.length > 0) {
+      const nextThree = upcoming
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, 3);
+      
+      priorities.push({
+        priority: 'LOW',
+        reason: 'Upcoming tasks',
+        tasks: nextThree.map(t => ({ id: t.id, text: t.text, date: t.date }))
+      });
+    }
+
+    return {
+      success: true,
+      priorities,
+      summary: `${overdue.length} overdue, ${dueToday.length} due today, ${upcoming.length} upcoming`
+    };
+  }
+
+  // Process user query with Ollama
+  async processQuery(userMessage, conversationHistory = []) {
+    try {
+      // Build system prompt with current task context
+      const taskContext = this.listTasks('all');
+      const systemPrompt = `You are a helpful task management assistant. You can help users manage their todos.
+
+Current task summary:
+- Total tasks: ${taskContext.count}
+- Tasks: ${JSON.stringify(taskContext.tasks, null, 2)}
+
+Available tools:
+${JSON.stringify(this.tools, null, 2)}
+
+When the user asks you to perform an action, respond with a JSON object containing:
+{
+  "action": "tool_name",
+  "parameters": { /* tool parameters */ },
+  "response": "Your natural language response to the user"
+}
+
+If no tool is needed, respond with:
+{
+  "action": "none",
+  "response": "Your natural language response"
+}
+
+Keep responses concise and helpful. Today's date is ${getTodayString()}.`;
+
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...conversationHistory,
+        { role: 'user', content: userMessage }
+      ];
+
+      const response = await this.ollama.chat(messages, this.model);
+      
+      // Try to parse JSON response
+      let parsed;
+      try {
+        // Extract JSON if it's wrapped in markdown code blocks
+        const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
+                         response.match(/```\n([\s\S]*?)\n```/);
+        const jsonStr = jsonMatch ? jsonMatch[1] : response;
+        parsed = JSON.parse(jsonStr);
+      } catch (e) {
+        // If parsing fails, treat as a plain response
+        parsed = {
+          action: 'none',
+          response: response
+        };
+      }
+
+      // Execute tool if needed
+      let toolResult = null;
+      if (parsed.action && parsed.action !== 'none') {
+        toolResult = await this.executeTool(parsed.action, parsed.parameters || {});
+      }
+
+      return {
+        response: parsed.response || response,
+        action: parsed.action,
+        toolResult,
+        fullResponse: response
+      };
+    } catch (error) {
+      console.error('Error processing query:', error);
+      return {
+        response: `Sorry, I encountered an error: ${error.message}. Make sure Ollama is running on localhost:11434.`,
+        error: error.message
+      };
+    }
+  }
+}
 
 /* ==================== MAIN COMPONENT ==================== */
 
 function Todo() {
-  // State
   const [todos, setTodos] = useState([]);
-  const [input, setInput] = useState('');
-  const [date, setDate] = useState('');
-  const [category, setCategory] = useState('');
-  const [activeTab, setActiveTab] = useState('all');
+  const [filter, setFilter] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const [loading, setLoading] = useState(true);
-  const [aiLoadingId, setAiLoadingId] = useState(null);
-  const [tempSuggestions, setTempSuggestions] = useState({});
-  const [hoveredTodoId, setHoveredTodoId] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState('');
-  const [editDate, setEditDate] = useState('');
-  const [editCategory, setEditCategory] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [agentInput, setAgentInput] = useState('');
+  const [agentMessages, setAgentMessages] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(null);
+  const [ollamaModels, setOllamaModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState('llama3.2');
+  const [ollamaConnected, setOllamaConnected] = useState(false);
+  
+  // Manual task creation form
+  const [newTaskText, setNewTaskText] = useState('');
+  const [newTaskDate, setNewTaskDate] = useState(getTodayString());
+  const [newTaskCategory, setNewTaskCategory] = useState('General');
+  
+  const messagesEndRef = useRef(null);
+  const agentRef = useRef(null);
 
-  // Fetch todos on mount
-  useEffect(() => { 
-    fetchTodos(); 
-  }, []);
+  // Scroll to bottom of messages
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [agentMessages]);
+
+  // Check Ollama connection and fetch models
+  useEffect(() => {
+    const checkOllama = async () => {
+      try {
+        const client = new OllamaClient();
+        const models = await client.listModels();
+        setOllamaModels(models);
+        setOllamaConnected(models.length > 0);
+        
+        // Set first available model if current selection isn't available
+        if (models.length > 0 && !models.find(m => m.name === selectedModel)) {
+          setSelectedModel(models[0].name);
+        }
+      } catch (error) {
+        console.error('Failed to connect to Ollama:', error);
+        setOllamaConnected(false);
+      }
+    };
+
+    checkOllama();
+    // Check every 30 seconds
+    const interval = setInterval(checkOllama, 30000);
+    return () => clearInterval(interval);
+  }, [selectedModel]);
 
   // Fetch todos from Supabase
+  useEffect(() => {
+    fetchTodos();
+  }, []);
+
   const fetchTodos = async () => {
-    setLoading(true);
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('todos')
         .select('*')
-        .order('created_at', { ascending: false });
-      
+        .order('date', { ascending: true });
+
       if (error) throw error;
       setTodos(data || []);
     } catch (error) {
@@ -188,617 +575,471 @@ function Todo() {
     }
   };
 
-  // Add new todo
-  const addTodo = async () => {
-    if (!input.trim()) return;
-    
-    const finalDate = date || getTodayString();
-    
+  const addTodo = async (text, date, category) => {
     try {
       const { data, error } = await supabase
         .from('todos')
-        .insert([{
-          text: input.trim(),
-          date: finalDate,
-          category: category.trim() || 'General',
-          completed: false,
-          notes: ''
-        }])
-        .select();
+        .insert([{ text, date, category, completed: false }])
+        .select()
+        .single();
 
       if (error) throw error;
-      
-      setTodos([data[0], ...todos]);
-      setInput('');
-      setDate('');
-      setCategory('');
-      setActiveTab('all');
+      setTodos([...todos, data]);
+      return data;
     } catch (error) {
       console.error('Error adding todo:', error);
-      alert('Failed to add task. Please try again.');
+      throw error;
     }
   };
 
-  // Toggle todo completion
-  const toggleTodo = useCallback(async (id, currentStatus) => {
-    // Optimistic update
-    setTodos(prev => prev.map(t => 
-      t.id === id ? { ...t, completed: !t.completed } : t
-    ));
-    
+  const toggleTodo = async (id, currentStatus) => {
     try {
       const { error } = await supabase
         .from('todos')
         .update({ completed: !currentStatus })
         .eq('id', id);
-      
+
       if (error) throw error;
+      setTodos(todos.map(todo => 
+        todo.id === id ? { ...todo, completed: !todo.completed } : todo
+      ));
     } catch (error) {
       console.error('Error toggling todo:', error);
-      // Revert on error
-      setTodos(prev => prev.map(t => 
-        t.id === id ? { ...t, completed: currentStatus } : t
-      ));
-    }
-  }, []);
-
-  // Start editing
-  const startEdit = (todo) => {
-    setEditingId(todo.id);
-    setEditText(todo.text);
-    setEditDate(todo.date);
-    setEditCategory(todo.category);
-  };
-
-  // Save edit
-  const saveEdit = async (id) => {
-    if (!editText.trim()) return;
-    
-    try {
-      const { error } = await supabase
-        .from('todos')
-        .update({ 
-          text: editText.trim(),
-          date: editDate,
-          category: editCategory.trim()
-        })
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      setTodos(todos.map(t => 
-        t.id === id ? { 
-          ...t, 
-          text: editText.trim(),
-          date: editDate,
-          category: editCategory.trim()
-        } : t
-      ));
-      
-      cancelEdit();
-    } catch (error) {
-      console.error('Error updating todo:', error);
-      alert('Failed to update task. Please try again.');
     }
   };
 
-  // Cancel edit
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditText('');
-    setEditDate('');
-    setEditCategory('');
-  };
-
-  // Delete todo
   const deleteTodo = async (id) => {
-    // Optimistic delete with animation
-    setTodos(prev => prev.filter(t => t.id !== id));
-    
     try {
       const { error } = await supabase
         .from('todos')
         .delete()
         .eq('id', id);
-      
+
       if (error) throw error;
+      setTodos(todos.filter(todo => todo.id !== id));
     } catch (error) {
       console.error('Error deleting todo:', error);
-      fetchTodos(); // Refetch on error
     }
   };
 
-  // Get AI suggestions
-  const getAiSuggestion = async (todo) => {
-    setAiLoadingId(todo.id);
-    
+  // Handle manual task creation
+  const handleManualAddTask = async (e) => {
+    e.preventDefault();
+    if (!newTaskText.trim()) return;
+
     try {
-      const res = await fetch('http://localhost:11434/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'llama3.2',
-          prompt: `Task: "${todo.text}". Provide 3 actionable, specific tips to complete this efficiently. Format as bullet points.`,
-          stream: false,
-        })
-      });
-      
-      if (!res.ok) throw new Error('AI service unavailable');
-      
-      const data = await res.json();
-      setTempSuggestions(prev => ({ 
-        ...prev, 
-        [todo.id]: data.response 
-      }));
+      await addTodo(newTaskText, newTaskDate, newTaskCategory);
+      setNewTaskText('');
+      setNewTaskDate(getTodayString());
+      setNewTaskCategory('General');
     } catch (error) {
-      console.error('Error getting AI suggestions:', error);
-      // Fallback suggestions
-      setTempSuggestions(prev => ({ 
-        ...prev, 
-        [todo.id]: "• Break the task into smaller, manageable steps\n• Set a specific deadline and time block\n• Remove distractions and focus on one thing at a time"
-      }));
-    } finally {
-      setAiLoadingId(null);
+      console.error('Error adding task:', error);
     }
   };
 
-  // Save AI note
-  const saveNote = async (id, noteText) => {
-    try {
-      const { error } = await supabase
-        .from('todos')
-        .update({ notes: noteText })
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      setTodos(todos.map(t => 
-        t.id === id ? { ...t, notes: noteText } : t
-      ));
-      
-      setTempSuggestions(prev => {
-        const copy = { ...prev };
-        delete copy[id];
-        return copy;
-      });
-    } catch (error) {
-      console.error('Error saving note:', error);
-      alert('Failed to save notes. Please try again.');
-    }
-  };
+  // Initialize agent with current todos
+  useEffect(() => {
+    agentRef.current = new TaskAgent(
+      todos, 
+      setTodos, 
+      addTodo, 
+      toggleTodo, 
+      deleteTodo,
+      selectedModel
+    );
+  }, [todos, selectedModel]);
 
-  // Discard AI suggestion
-  const discardSuggestion = (id) => {
-    setTempSuggestions(prev => {
-      const copy = { ...prev };
-      delete copy[id];
-      return copy;
-    });
-  };
+  // Handle agent message
+  const handleAgentMessage = async (message) => {
+    if (!message.trim() || !ollamaConnected) return;
 
-  // Calculate task counts (memoized)
-  const taskCounts = useMemo(() => {
-    const today = getTodayString();
-    
-    return {
-      all: todos.length,
-      today: todos.filter(t => t.date === today && !t.completed).length,
-      completed: todos.filter(t => t.completed).length,
-      pending: todos.filter(t => !t.completed).length,
-      overdue: todos.filter(t => isOverdue(t.date, t.completed)).length,
+    const userMessage = {
+      role: 'user',
+      content: message,
+      timestamp: new Date().toISOString()
     };
+
+    setAgentMessages(prev => [...prev, userMessage]);
+    setAgentInput('');
+    setAiLoading(true);
+
+    try {
+      // Get conversation history (last 10 messages)
+      const history = agentMessages.slice(-10).map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+      const result = await agentRef.current.processQuery(message, history);
+
+      const agentMessage = {
+        role: 'assistant',
+        content: result.response,
+        action: result.action,
+        toolResult: result.toolResult,
+        timestamp: new Date().toISOString()
+      };
+
+      setAgentMessages(prev => [...prev, agentMessage]);
+    } catch (error) {
+      const errorMessage = {
+        role: 'assistant',
+        content: `Error: ${error.message}`,
+        timestamp: new Date().toISOString()
+      };
+      setAgentMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // Quick actions
+  const quickActions = [
+    'Show my tasks for today',
+    'What are my overdue tasks?',
+    'Analyze my productivity',
+    'Suggest priorities',
+    'Add a task to review budget'
+  ];
+
+  // Filter todos
+  const filteredTodos = useMemo(() => {
+    let filtered = todos;
+
+    // Category filter
+    if (selectedCategory !== 'All') {
+      filtered = filtered.filter(todo => todo.category === selectedCategory);
+    }
+
+    // Status filter
+    switch (filter) {
+      case 'active':
+        return filtered.filter(todo => !todo.completed);
+      case 'completed':
+        return filtered.filter(todo => todo.completed);
+      default:
+        return filtered;
+    }
+  }, [todos, filter, selectedCategory]);
+
+  // Get unique categories
+  const categories = useMemo(() => {
+    const cats = ['All', ...new Set(todos.map(todo => todo.category))];
+    return cats;
   }, [todos]);
 
-  // Filter tasks based on active tab (memoized)
-  const filteredTasks = useMemo(() => {
-    const today = getTodayString();
+  // Stats
+  const stats = useMemo(() => {
+    const total = todos.length;
+    const completed = todos.filter(t => t.completed).length;
+    const pending = total - completed;
+    const overdue = todos.filter(t => isOverdue(t.date, t.completed)).length;
     
-    switch(activeTab) {
-      case 'today':
-        return todos.filter(t => t.date === today && !t.completed);
-      case 'completed':
-        return todos.filter(t => t.completed);
-      case 'pending':
-        return todos.filter(t => !t.completed);
-      default:
-        return todos;
-    }
-  }, [todos, activeTab]);
+    return { total, completed, pending, overdue };
+  }, [todos]);
 
-  // Navigation items
-  const navItems = [
-    { id: 'all', label: 'All Tasks', icon: '📋', count: taskCounts.all },
-    { id: 'today', label: "Today", icon: '⭐', count: taskCounts.today },
-    { id: 'pending', label: 'Pending', icon: '⏳', count: taskCounts.pending },
-    { id: 'completed', label: 'Completed', icon: '✓', count: taskCounts.completed },
-  ];
+  if (loading) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.loader}>Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>
-      <style>{keyframesCSS}</style>
-      
-      {/* SIDEBAR */}
-      <aside style={styles.sidebar}>
-        <div style={styles.sidebarHeader}>
-          <h2 style={styles.logo}>
-            <span style={styles.logoGradient}>TASKFLOW</span>
-            <span style={styles.logoBadge}>AI</span>
-          </h2>
-          <p style={styles.logoSubtext}>
-            Smart task management
+      <div style={styles.header}>
+        <div>
+          <h1 style={styles.title}>✨ AI Task Manager</h1>
+          <p style={styles.subtitle}>
+            Powered by Ollama {ollamaConnected ? '🟢' : '🔴'} 
+            {ollamaConnected && ` - ${selectedModel}`}
           </p>
         </div>
+        <Link to="/" style={styles.backButton}>
+          ← Back to Home
+        </Link>
+      </div>
 
-        <nav style={styles.nav}>
-          {navItems.map(({ id, label, icon, count }) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              style={{
-                ...styles.navButton,
-                ...(activeTab === id ? styles.navButtonActive : {}),
-              }}
-            >
-              <span style={styles.navButtonContent}>
-                <span style={styles.navIcon}>{icon}</span>
-                <span>{label}</span>
-              </span>
-              <StatBadge 
-                count={count} 
-                type={id === 'today' && count > 0 ? 'today' : null}
-              />
-            </button>
-          ))}
-        </nav>
-
-        <div style={styles.sidebarFooter}>
-          <button 
-            onClick={() => setActiveTab('add')}
-            style={styles.createButton}
-          >
-            <span style={{ fontSize: '1.2rem', fontWeight: '300' }}>+</span>
-            New Task
-          </button>
-          
-          {taskCounts.overdue > 0 && (
-            <div style={styles.overdueAlert}>
-              <span style={{ fontSize: '1.2rem' }}>⚠️</span>
-              <div style={{ flex: 1 }}>
-                <div style={styles.overdueText}>
-                  {taskCounts.overdue} overdue task{taskCounts.overdue !== 1 ? 's' : ''}
-                </div>
-                <div style={styles.overdueSubtext}>
-                  Needs attention
-                </div>
-              </div>
-            </div>
-          )}
+      {!ollamaConnected && (
+        <div style={styles.warningBanner}>
+          <strong>⚠️ Ollama not connected</strong>
+          <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
+            Make sure Ollama is running on localhost:11434. 
+            <br />
+            Install from <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" style={{ color: theme.accent }}>ollama.ai</a>
+          </p>
         </div>
-      </aside>
+      )}
 
-      {/* MAIN CONTENT */}
-      <main style={styles.main}>
-        <header style={styles.header}>
-          <div>
-            <h1 style={styles.pageTitle}>
-              {activeTab === 'all' ? 'All Tasks' :
-               activeTab === 'today' ? "Today's Tasks" :
-               activeTab === 'pending' ? 'Pending Tasks' :
-               activeTab === 'completed' ? 'Completed Tasks' :
-               'Create New Task'}
-            </h1>
-            <p style={styles.pageSubtitle}>
-              {activeTab === 'add' 
-                ? 'Add a new task to stay organized'
-                : `${filteredTasks.length} task${filteredTasks.length !== 1 ? 's' : ''}`}
-            </p>
-          </div>
-          
-          <div style={styles.headerActions}>
-            <div style={styles.dateDisplay}>
-              <span style={{ fontSize: '1rem', marginRight: '0.5rem' }}>📅</span>
-              {new Date().toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: 'numeric',
-                year: 'numeric'
-              })}
+      <div style={styles.mainGrid}>
+        {/* Left Panel - Tasks */}
+        <div style={styles.leftPanel}>
+          <div style={styles.statsGrid}>
+            <div style={styles.statCard}>
+              <div style={styles.statValue}>{stats.total}</div>
+              <div style={styles.statLabel}>Total</div>
             </div>
-            <Link to="/" style={styles.logoutButton}>
-              Logout
-            </Link>
+            <div style={styles.statCard}>
+              <div style={styles.statValue}>{stats.completed}</div>
+              <div style={styles.statLabel}>Completed</div>
+            </div>
+            <div style={styles.statCard}>
+              <div style={styles.statValue}>{stats.pending}</div>
+              <div style={styles.statLabel}>Pending</div>
+            </div>
+            <div style={{...styles.statCard, borderColor: stats.overdue > 0 ? theme.danger : theme.border}}>
+              <div style={{...styles.statValue, color: stats.overdue > 0 ? theme.danger : theme.text}}>
+                {stats.overdue}
+              </div>
+              <div style={styles.statLabel}>Overdue</div>
+            </div>
           </div>
-        </header>
 
-        <div style={styles.content}>
-          {activeTab === 'add' ? (
-            /* CREATE TASK FORM */
-            <div style={styles.createForm}>
-              <h3 style={styles.formTitle}>Create New Task</h3>
-              
-              <div style={styles.formFields}>
-                <div style={{ width: '100%' }}>
-                  <label style={styles.label}>Task Description</label>
-                  <input 
-                    placeholder="What needs to be done?" 
-                    value={input} 
-                    onChange={e => setInput(e.target.value)}
-                    style={styles.input}
-                    onKeyPress={(e) => e.key === 'Enter' && addTodo()}
-                    autoFocus
-                  />
-                </div>
-                
-                <div style={styles.formRow}>
-                  <div style={{ width: '100%' }}>
-                    <label style={styles.label}>Due Date</label>
-                    <input 
-                      type="date" 
-                      value={date} 
-                      onChange={e => setDate(e.target.value)}
-                      style={styles.input}
-                      min={getTodayString()}
-                    />
-                  </div>
-                  <div style={{ width: '100%' }}>
-                    <label style={styles.label}>Category</label>
-                    <input 
-                      placeholder="e.g., Work, Personal" 
-                      value={category} 
-                      onChange={e => setCategory(e.target.value)}
-                      style={styles.input}
-                      list="categories"
-                    />
-                    <datalist id="categories">
-                      <option value="Work" />
-                      <option value="Personal" />
-                      <option value="Health" />
-                      <option value="Finance" />
-                      <option value="Learning" />
-                    </datalist>
-                  </div>
-                </div>
-                
-                <button 
-                  onClick={addTodo}
-                  disabled={!input.trim()}
-                  style={{
-                    ...styles.submitButton,
-                    opacity: !input.trim() ? 0.5 : 1,
-                    cursor: !input.trim() ? 'not-allowed' : 'pointer'
-                  }}
+          <form onSubmit={handleManualAddTask} style={styles.addTaskForm}>
+            <div style={styles.addTaskHeader}>
+              <span style={styles.addTaskTitle}>➕ Add New Task</span>
+            </div>
+            <div style={styles.addTaskInputs}>
+              <input
+                type="text"
+                value={newTaskText}
+                onChange={(e) => setNewTaskText(e.target.value)}
+                placeholder="What needs to be done?"
+                style={styles.taskInput}
+                required
+              />
+              <div style={styles.taskMetaInputs}>
+                <input
+                  type="date"
+                  value={newTaskDate}
+                  onChange={(e) => setNewTaskDate(e.target.value)}
+                  style={styles.dateInput}
+                  required
+                />
+                <select
+                  value={newTaskCategory}
+                  onChange={(e) => setNewTaskCategory(e.target.value)}
+                  style={styles.categoryInput}
                 >
-                  <span style={{ fontSize: '1.2rem' }}>+</span>
+                  <option value="General">General</option>
+                  <option value="Work">Work</option>
+                  <option value="Personal">Personal</option>
+                  <option value="Shopping">Shopping</option>
+                  <option value="Health">Health</option>
+                  <option value="Learning">Learning</option>
+                </select>
+                <button type="submit" style={styles.addTaskButton}>
                   Add Task
                 </button>
               </div>
             </div>
-          ) : loading ? (
-            /* LOADING STATE */
-            <div style={styles.loadingState}>
-              <div style={styles.spinner} />
-              <p style={{ marginTop: '1rem', color: theme.textMuted }}>
-                Loading tasks...
-              </p>
+          </form>
+
+          <div style={styles.filterBar}>
+            <div style={styles.filterButtons}>
+              {['all', 'active', 'completed'].map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  style={{
+                    ...styles.filterButton,
+                    ...(filter === f ? styles.filterButtonActive : {})
+                  }}
+                >
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
             </div>
-          ) : filteredTasks.length === 0 ? (
-            /* EMPTY STATE */
-            <EmptyState 
-              activeTab={activeTab} 
-              onCreateTask={() => setActiveTab('add')}
-            />
-          ) : (
-            /* TASKS LIST */
-            <div style={styles.tasksList}>
-              {filteredTasks.map(todo => (
+          </div>
+
+          <div style={styles.categoryBar}>
+            {categories.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                style={{
+                  ...styles.categoryButton,
+                  ...(selectedCategory === cat ? styles.categoryButtonActive : {})
+                }}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          <div style={styles.taskList}>
+            {filteredTodos.length === 0 ? (
+              <div style={styles.emptyState}>
+                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📝</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                  No tasks yet
+                </div>
+                <div style={{ color: theme.textMuted }}>
+                  Ask the AI assistant to add your first task!
+                </div>
+              </div>
+            ) : (
+              filteredTodos.map(todo => (
                 <div
                   key={todo.id}
-                  style={styles.taskWrapper}
-                  onMouseEnter={() => setHoveredTodoId(todo.id)}
-                  onMouseLeave={() => setHoveredTodoId(null)}
+                  style={{
+                    ...styles.taskCard,
+                    ...(isOverdue(todo.date, todo.completed) ? styles.taskCardOverdue : {})
+                  }}
                 >
-                  {editingId === todo.id ? (
-                    /* EDIT MODE */
-                    <div style={styles.editCard}>
-                      <div style={styles.formFields}>
-                        <div style={{ width: '100%' }}>
-                          <input 
-                            value={editText}
-                            onChange={e => setEditText(e.target.value)}
-                            style={styles.input}
-                            placeholder="Edit task..."
-                            onKeyPress={(e) => e.key === 'Enter' && saveEdit(todo.id)}
-                            autoFocus
-                          />
-                        </div>
-                        
-                        <div style={styles.formRow}>
-                          <div style={{ width: '100%' }}>
-                            <label style={styles.label}>Due Date</label>
-                            <input 
-                              type="date" 
-                              value={editDate} 
-                              onChange={e => setEditDate(e.target.value)}
-                              style={styles.input}
-                            />
-                          </div>
-                          <div style={{ width: '100%' }}>
-                            <label style={styles.label}>Category</label>
-                            <input 
-                              value={editCategory}
-                              onChange={e => setEditCategory(e.target.value)}
-                              style={styles.input}
-                              placeholder="Category"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div style={styles.editActions}>
-                          <button 
-                            onClick={() => saveEdit(todo.id)}
-                            disabled={!editText.trim()}
-                            style={styles.saveButton}
-                          >
-                            ✓ Save
-                          </button>
-                          <button 
-                            onClick={cancelEdit}
-                            style={styles.cancelButton}
-                          >
-                            Cancel
-                          </button>
-                        </div>
+                  <div style={styles.taskContent}>
+                    <input
+                      type="checkbox"
+                      checked={todo.completed}
+                      onChange={() => toggleTodo(todo.id, todo.completed)}
+                      style={styles.checkbox}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        ...styles.taskText,
+                        ...(todo.completed ? styles.taskTextCompleted : {})
+                      }}>
+                        {todo.text}
+                      </div>
+                      <div style={styles.taskMeta}>
+                        <span style={styles.taskCategory}>{todo.category}</span>
+                        <span style={styles.taskDate}>
+                          {formatDate(todo.date)}
+                          {isOverdue(todo.date, todo.completed) && ' ⚠️'}
+                        </span>
                       </div>
                     </div>
-                  ) : (
-                    /* TASK CARD */
-                    <div style={{
-                      ...styles.taskCard,
-                      ...(hoveredTodoId === todo.id ? styles.taskCardHover : {}),
-                      borderLeft: todo.completed 
-                        ? `4px solid ${theme.success}` 
-                        : isOverdue(todo.date, todo.completed)
-                        ? `4px solid ${theme.danger}` 
-                        : `4px solid ${theme.accent}`
-                    }}>
-                      <div style={styles.taskContent}>
-                        <button
-                          onClick={() => toggleTodo(todo.id, todo.completed)}
-                          style={{
-                            ...styles.checkbox,
-                            borderColor: todo.completed ? theme.success : theme.textMuted,
-                            background: todo.completed ? theme.success : 'transparent',
-                          }}
-                        >
-                          {todo.completed && (
-                            <span style={styles.checkmark}>✓</span>
-                          )}
-                        </button>
-                        
-                        <div style={{ flex: 1 }}>
-                          <div style={{ 
-                            ...styles.taskText,
-                            textDecoration: todo.completed ? 'line-through' : 'none',
-                            color: todo.completed ? theme.textMuted : theme.text,
-                          }}>
-                            {todo.text}
-                          </div>
-                          
-                          <div style={styles.taskMeta}>
-                            <span style={styles.taskDate}>
-                              📅 {formatDate(todo.date)}
-                              {isOverdue(todo.date, todo.completed) && (
-                                <span style={styles.overdueLabel}>
-                                  Overdue
-                                </span>
-                              )}
-                            </span>
-                            
-                            <span style={styles.taskCategory}>
-                              {todo.category}
-                            </span>
-                            
-                            {todo.notes && (
-                              <span style={styles.notesIndicator}>
-                                📝 Has notes
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* ACTION BUTTONS */}
-                      <div style={styles.taskActions}>
-                        <button 
-                          onClick={() => getAiSuggestion(todo)}
-                          disabled={aiLoadingId === todo.id}
-                          style={styles.aiButton}
-                          title="Get AI suggestions"
-                        >
-                          {aiLoadingId === todo.id ? <AiLoader /> : '✨ AI'}
-                        </button>
-                        
-                        <button 
-                          onClick={() => startEdit(todo)}
-                          style={styles.editButton}
-                          title="Edit task"
-                        >
-                          ✏️
-                        </button>
-                        
-                        <button 
-                          onClick={() => deleteTodo(todo.id)}
-                          style={styles.deleteButton}
-                          title="Delete task"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    <button
+                      onClick={() => deleteTodo(todo.id)}
+                      style={styles.deleteButton}
+                      title="Delete task"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
 
-                  {/* AI SUGGESTIONS */}
-                  {tempSuggestions[todo.id] && (
-                    <div style={styles.suggestionsBox}>
-                      <div style={styles.suggestionsHeader}>
-                        <div style={styles.suggestionsTitle}>
-                          <span style={{ fontSize: '1rem' }}>🤖</span>
-                          AI Suggestions
-                        </div>
-                        <div style={styles.suggestionsHint}>
-                          Review and save to notes
-                        </div>
-                      </div>
-                      
-                      <div style={styles.suggestionsContent}>
-                        <ul style={styles.suggestionsList}>
-                          {tempSuggestions[todo.id]
-                            .split('\n')
-                            .filter(Boolean)
-                            .map((line, i) => (
-                              <li key={i}>
-                                {line.replace(/^[-•*]\s*/, '')}
-                              </li>
-                            ))}
-                        </ul>
-                      </div>
-                      
-                      <div style={styles.suggestionsActions}>
-                        <button 
-                          onClick={() => saveNote(todo.id, tempSuggestions[todo.id])}
-                          style={styles.saveNoteButton}
-                        >
-                          💾 Save to Notes
-                        </button>
-                        <button 
-                          onClick={() => discardSuggestion(todo.id)}
-                          style={styles.discardButton}
-                        >
-                          Discard
-                        </button>
-                      </div>
-                    </div>
-                  )}
+        {/* Right Panel - AI Agent */}
+        <div style={styles.agentContainer}>
+          <div style={styles.agentHeader}>
+            <div>
+              <div style={styles.agentTitle}>🤖 AI Assistant</div>
+              <div style={styles.agentSubtitle}>
+                Ask me anything about your tasks
+              </div>
+            </div>
+            {ollamaConnected && ollamaModels.length > 1 && (
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                style={styles.modelSelect}
+              >
+                {ollamaModels.map(model => (
+                  <option key={model.name} value={model.name}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <div style={styles.agentBadge}>
+              {ollamaConnected ? 'Connected' : 'Disconnected'}
+            </div>
+          </div>
 
-                  {/* SAVED NOTES */}
-                  {todo.notes && hoveredTodoId === todo.id && !tempSuggestions[todo.id] && (
-                    <div style={styles.notesBox}>
-                      <div style={styles.notesTitle}>
-                        <span style={{ fontSize: '1rem' }}>📝</span>
-                        Saved Notes
-                      </div>
-                      <ul style={styles.notesList}>
-                        {todo.notes.split('\n').filter(Boolean).map((line, i) => (
-                          <li key={i}>{line.replace(/^[-•*]\s*/, '')}</li>
-                        ))}
-                      </ul>
+          <div style={styles.agentMessages}>
+            {agentMessages.length === 0 && (
+              <div style={styles.emptyState}>
+                <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>💬</div>
+                <div style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                  Start a conversation
+                </div>
+                <div style={{ color: theme.textMuted, fontSize: '0.875rem' }}>
+                  Ask me to manage tasks, analyze productivity, or suggest priorities
+                </div>
+              </div>
+            )}
+            
+            {agentMessages.map((msg, idx) => (
+              <div
+                key={idx}
+                style={{
+                  ...styles.message,
+                  ...(msg.role === 'user' ? styles.userMessage : styles.agentMessage)
+                }}
+              >
+                <div style={styles.messageHeader}>
+                  <div style={styles.messageRole}>
+                    {msg.role === 'user' ? '👤 You' : '🤖 Assistant'}
+                  </div>
+                  {msg.action && msg.action !== 'none' && (
+                    <div style={styles.toolBadge}>
+                      🛠️ {msg.action}
                     </div>
                   )}
                 </div>
+                <div style={styles.messageContent}>{msg.content}</div>
+                {msg.toolResult && (
+                  <div style={styles.reasoningBadge}>
+                    Result: {JSON.stringify(msg.toolResult, null, 2)}
+                  </div>
+                )}
+              </div>
+            ))}
+            
+            {aiLoading && (
+              <div style={styles.message}>
+                <div style={styles.aiLoaderContainer}>
+                  <div style={styles.aiLoaderText}>Thinking</div>
+                  <div style={{...styles.aiLoaderDot, animationDelay: '0s'}} />
+                  <div style={{...styles.aiLoaderDot, animationDelay: '0.2s'}} />
+                  <div style={{...styles.aiLoaderDot, animationDelay: '0.4s'}} />
+                </div>
+              </div>
+            )}
+            
+            <div ref={messagesEndRef} />
+          </div>
+
+          {agentMessages.length === 0 && (
+            <div style={styles.quickActions}>
+              {quickActions.map((action, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleAgentMessage(action)}
+                  style={styles.quickActionBtn}
+                  disabled={!ollamaConnected}
+                >
+                  {action}
+                </button>
               ))}
             </div>
           )}
+
+          <div style={styles.agentInput}>
+            <input
+              type="text"
+              value={agentInput}
+              onChange={(e) => setAgentInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAgentMessage(agentInput)}
+              placeholder={ollamaConnected ? "Ask me anything..." : "Waiting for Ollama connection..."}
+              style={styles.agentInputField}
+              disabled={!ollamaConnected || aiLoading}
+            />
+            <button
+              onClick={() => handleAgentMessage(agentInput)}
+              style={styles.agentSendBtn}
+              disabled={!ollamaConnected || aiLoading || !agentInput.trim()}
+            >
+              Send
+            </button>
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
@@ -807,722 +1048,519 @@ function Todo() {
 
 const styles = {
   container: {
-    display: 'flex',
     minHeight: '100vh',
     background: theme.bg,
-    color: theme.text,
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Roboto, sans-serif',
+    padding: '2rem',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
-  
-  /* Sidebar */
-  sidebar: {
-    width: '280px',
-    background: theme.surface,
-    padding: '2rem 1.5rem',
-    borderRight: `1px solid ${theme.border}`,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2rem',
-    position: 'sticky',
-    top: 0,
-    height: '100vh',
-    overflowY: 'auto',
-  },
-  
-  sidebarHeader: {
-    paddingBottom: '1rem',
-    borderBottom: `1px solid ${theme.border}`,
-  },
-  
-  logo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    marginBottom: '0.5rem',
-    fontSize: '1.5rem',
-    fontWeight: '700',
-    letterSpacing: '-0.02em',
-  },
-  
-  logoGradient: {
-    background: theme.gradient,
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
-  },
-  
-  logoBadge: {
-    fontSize: '0.65rem',
-    background: theme.gradient,
-    color: 'white',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    fontWeight: '700',
-    letterSpacing: '0.05em',
-  },
-  
-  logoSubtext: {
-    color: theme.textMuted,
-    fontSize: '0.8rem',
-    fontWeight: '400',
-  },
-  
-  nav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem',
-  },
-  
-  navButton: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '0.875rem 1rem',
-    background: 'transparent',
-    border: 'none',
-    borderLeft: '3px solid transparent',
-    borderRadius: '0 8px 8px 0',
-    color: theme.textSecondary,
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    textAlign: 'left',
-    fontFamily: 'inherit',
-  },
-  
-  navButtonActive: {
-    background: theme.glass,
-    borderLeftColor: theme.accent,
-    color: theme.accent,
-  },
-  
-  navButtonContent: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-  },
-  
-  navIcon: {
-    fontSize: '1.1rem',
-    display: 'flex',
-    alignItems: 'center',
-  },
-  
-  sidebarFooter: {
-    marginTop: 'auto',
-    paddingTop: '1rem',
-    borderTop: `1px solid ${theme.border}`,
-  },
-  
-  createButton: {
-    width: '100%',
-    padding: '0.875rem 1rem',
-    background: theme.gradient,
-    border: 'none',
-    borderRadius: '10px',
-    color: 'white',
-    fontWeight: '600',
-    fontSize: '0.875rem',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '0.5rem',
-    fontFamily: 'inherit',
-    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)',
-  },
-  
-  overdueAlert: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    background: 'rgba(239, 68, 68, 0.1)',
-    border: `1px solid rgba(239, 68, 68, 0.2)`,
-    borderRadius: '10px',
-    padding: '0.875rem',
-    marginTop: '1rem',
-  },
-  
-  overdueText: {
-    fontSize: '0.8rem',
-    color: theme.danger,
-    fontWeight: '600',
-  },
-  
-  overdueSubtext: {
-    fontSize: '0.7rem',
-    color: theme.textMuted,
-    marginTop: '2px',
-  },
-  
-  /* Main Content */
-  main: {
-    flex: 1,
-    padding: '3rem',
-    overflowY: 'auto',
-    maxWidth: '1200px',
-    margin: '0 auto',
-    width: '100%',
-  },
-  
+
   header: {
+    maxWidth: '1400px',
+    margin: '0 auto 2rem',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '2.5rem',
-    animation: 'fadeIn 0.5s ease',
   },
-  
-  pageTitle: {
-    fontSize: '2rem',
+
+  title: {
+    fontSize: '2.5rem',
     fontWeight: '700',
-    marginBottom: '0.5rem',
-    letterSpacing: '-0.02em',
     background: theme.gradient,
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     backgroundClip: 'text',
-    display: 'inline-block',
+    marginBottom: '0.5rem',
   },
-  
-  pageSubtitle: {
+
+  subtitle: {
     color: theme.textMuted,
     fontSize: '0.875rem',
-    fontWeight: '400',
   },
-  
-  headerActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-  },
-  
-  dateDisplay: {
-    padding: '0.5rem 1rem',
-    background: theme.glass,
-    border: `1px solid ${theme.glassBorder}`,
-    borderRadius: '8px',
-    fontSize: '0.875rem',
-    color: theme.textSecondary,
-    fontWeight: '500',
-    display: 'flex',
-    alignItems: 'center',
-  },
-  
-  logoutButton: {
-    padding: '0.5rem 1rem',
-    background: 'transparent',
+
+  backButton: {
+    padding: '0.75rem 1.5rem',
+    background: theme.surface,
     border: `1px solid ${theme.border}`,
-    borderRadius: '8px',
-    color: theme.accent,
+    borderRadius: '10px',
+    color: theme.text,
     textDecoration: 'none',
     fontSize: '0.875rem',
     fontWeight: '500',
     transition: 'all 0.2s ease',
-    display: 'inline-block',
   },
-  
-  content: {
-    animation: 'slideIn 0.3s ease',
+
+  warningBanner: {
+    maxWidth: '1400px',
+    margin: '0 auto 2rem',
+    padding: '1rem 1.5rem',
+    background: 'rgba(245, 158, 11, 0.1)',
+    border: '1px solid rgba(245, 158, 11, 0.3)',
+    borderRadius: '12px',
+    color: theme.warning,
   },
-  
-  /* Create Form */
-  createForm: {
-    background: theme.surface,
-    padding: '2.5rem',
-    borderRadius: '16px',
-    border: `1px solid ${theme.border}`,
-    maxWidth: '600px',
+
+  mainGrid: {
+    maxWidth: '1400px',
     margin: '0 auto',
-    boxShadow: '0 4px 24px rgba(0, 0, 0, 0.2)',
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '2rem',
   },
-  
-  formTitle: {
-    marginBottom: '2rem',
-    color: theme.accent,
-    fontSize: '1.25rem',
-    fontWeight: '600',
-  },
-  
-  formFields: {
+
+  leftPanel: {
     display: 'flex',
     flexDirection: 'column',
     gap: '1.5rem',
   },
-  
-  formRow: {
+
+  statsGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: 'repeat(4, 1fr)',
     gap: '1rem',
   },
-  
-  label: {
-    display: 'block',
-    marginBottom: '0.5rem',
-    fontSize: '0.8rem',
-    color: theme.textSecondary,
-    fontWeight: '500',
-    letterSpacing: '0.01em',
+
+  statCard: {
+    background: theme.surface,
+    padding: '1.5rem',
+    borderRadius: '12px',
+    border: `1px solid ${theme.border}`,
+    textAlign: 'center',
   },
-  
-  input: {
-    width: '100%',
+
+  statValue: {
+    fontSize: '2rem',
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: '0.5rem',
+  },
+
+  statLabel: {
+    fontSize: '0.75rem',
+    color: theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+
+  addTaskForm: {
+    background: theme.surface,
+    padding: '1.5rem',
+    borderRadius: '12px',
+    border: `1px solid ${theme.border}`,
+  },
+
+  addTaskHeader: {
+    marginBottom: '1rem',
+  },
+
+  addTaskTitle: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: theme.accent,
+  },
+
+  addTaskInputs: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+  },
+
+  taskInput: {
+    padding: '0.75rem 1rem',
+    background: theme.bg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.text,
+    fontSize: '0.875rem',
+    fontFamily: 'inherit',
+    outline: 'none',
+    transition: 'border-color 0.2s ease',
+  },
+
+  taskMetaInputs: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr auto',
+    gap: '0.75rem',
+  },
+
+  dateInput: {
+    padding: '0.75rem 1rem',
+    background: theme.bg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.text,
+    fontSize: '0.875rem',
+    fontFamily: 'inherit',
+    outline: 'none',
+  },
+
+  categoryInput: {
+    padding: '0.75rem 1rem',
+    background: theme.bg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.text,
+    fontSize: '0.875rem',
+    fontFamily: 'inherit',
+    outline: 'none',
+    cursor: 'pointer',
+  },
+
+  addTaskButton: {
+    padding: '0.75rem 1.5rem',
+    background: theme.accent,
+    border: 'none',
+    borderRadius: '8px',
+    color: 'white',
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+  },
+
+  filterBar: {
+    display: 'flex',
+    gap: '1rem',
+    alignItems: 'center',
+  },
+
+  filterButtons: {
+    display: 'flex',
+    gap: '0.5rem',
+  },
+
+  filterButton: {
+    padding: '0.5rem 1rem',
+    background: 'transparent',
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.textSecondary,
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+  },
+
+  filterButtonActive: {
+    background: theme.glass,
+    border: `1px solid ${theme.accent}`,
+    color: theme.accent,
+  },
+
+  categoryBar: {
+    display: 'flex',
+    gap: '0.5rem',
+    flexWrap: 'wrap',
+  },
+
+  categoryButton: {
+    padding: '0.5rem 1rem',
+    background: 'transparent',
+    border: `1px solid ${theme.border}`,
+    borderRadius: '20px',
+    color: theme.textSecondary,
+    fontSize: '0.75rem',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+  },
+
+  categoryButtonActive: {
+    background: theme.accent,
+    borderColor: theme.accent,
+    color: 'white',
+  },
+
+  taskList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+    maxHeight: 'calc(100vh - 25rem)',
+    overflowY: 'auto',
+    paddingRight: '0.5rem',
+  },
+
+  taskCard: {
+    background: theme.surface,
+    padding: '1rem',
+    borderRadius: '12px',
+    border: `1px solid ${theme.border}`,
+    transition: 'all 0.2s ease',
+  },
+
+  taskCardOverdue: {
+    borderColor: theme.danger,
+    background: 'rgba(239, 68, 68, 0.05)',
+  },
+
+  taskContent: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '1rem',
+  },
+
+  checkbox: {
+    width: '20px',
+    height: '20px',
+    marginTop: '2px',
+    cursor: 'pointer',
+  },
+
+  taskText: {
+    fontSize: '0.95rem',
+    color: theme.text,
+    marginBottom: '0.5rem',
+    lineHeight: '1.5',
+  },
+
+  taskTextCompleted: {
+    textDecoration: 'line-through',
+    color: theme.textMuted,
+  },
+
+  taskMeta: {
+    display: 'flex',
+    gap: '1rem',
+    fontSize: '0.75rem',
+  },
+
+  taskCategory: {
+    color: theme.accent,
+    fontWeight: '600',
+  },
+
+  taskDate: {
+    color: theme.textMuted,
+  },
+
+  deleteButton: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '1.25rem',
+    opacity: 0.6,
+    transition: 'opacity 0.2s ease',
+  },
+
+  emptyState: {
+    textAlign: 'center',
+    padding: '3rem 1rem',
+    color: theme.textSecondary,
+  },
+
+  loader: {
+    textAlign: 'center',
+    padding: '3rem',
+    color: theme.text,
+    fontSize: '1.25rem',
+  },
+
+  /* Agent Chat */
+  agentContainer: {
+    background: theme.surface,
+    borderRadius: '16px',
+    border: `1px solid ${theme.agentBorder}`,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    height: 'calc(100vh - 10rem)',
+    boxShadow: '0 4px 24px rgba(139, 92, 246, 0.1)',
+  },
+
+  agentHeader: {
+    padding: '1.5rem',
+    background: theme.agentBg,
+    borderBottom: `1px solid ${theme.agentBorder}`,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1rem',
+  },
+
+  agentTitle: {
+    fontSize: '1.25rem',
+    fontWeight: '700',
+    color: '#8b5cf6',
+    marginBottom: '0.25rem',
+  },
+
+  agentSubtitle: {
+    fontSize: '0.8rem',
+    color: theme.textMuted,
+  },
+
+  modelSelect: {
+    padding: '0.5rem',
+    background: theme.bg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.text,
+    fontSize: '0.75rem',
+    fontFamily: 'inherit',
+  },
+
+  agentBadge: {
+    padding: '0.5rem 1rem',
+    background: 'rgba(139, 92, 246, 0.15)',
+    border: `1px solid ${theme.agentBorder}`,
+    borderRadius: '20px',
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    color: '#8b5cf6',
+  },
+
+  agentMessages: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem',
+  },
+
+  message: {
+    padding: '1rem',
+    borderRadius: '12px',
+    maxWidth: '85%',
+    animation: 'fadeIn 0.3s ease',
+  },
+
+  userMessage: {
+    background: theme.glass,
+    border: `1px solid ${theme.glassBorder}`,
+    marginLeft: 'auto',
+  },
+
+  agentMessage: {
+    background: theme.agentBg,
+    border: `1px solid ${theme.agentBorder}`,
+    marginRight: 'auto',
+  },
+
+  messageHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '0.5rem',
+    gap: '1rem',
+  },
+
+  messageRole: {
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    color: theme.accent,
+  },
+
+  toolBadge: {
+    fontSize: '0.7rem',
+    padding: '3px 8px',
+    background: 'rgba(139, 92, 246, 0.2)',
+    border: `1px solid ${theme.agentBorder}`,
+    borderRadius: '10px',
+    color: '#8b5cf6',
+    fontWeight: '500',
+  },
+
+  messageContent: {
+    fontSize: '0.875rem',
+    lineHeight: '1.6',
+    color: theme.text,
+    whiteSpace: 'pre-wrap',
+  },
+
+  reasoningBadge: {
+    marginTop: '0.5rem',
+    fontSize: '0.7rem',
+    color: theme.textMuted,
+    fontStyle: 'italic',
+  },
+
+  quickActions: {
+    padding: '1rem 1.5rem',
+    borderTop: `1px solid ${theme.border}`,
+    display: 'flex',
+    gap: '0.5rem',
+    flexWrap: 'wrap',
+  },
+
+  quickActionBtn: {
+    padding: '0.5rem 1rem',
+    background: 'transparent',
+    border: `1px solid ${theme.agentBorder}`,
+    borderRadius: '20px',
+    color: '#8b5cf6',
+    fontSize: '0.75rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+  },
+
+  agentInput: {
+    padding: '1.5rem',
+    borderTop: `1px solid ${theme.border}`,
+    display: 'flex',
+    gap: '0.75rem',
+  },
+
+  agentInputField: {
+    flex: 1,
     padding: '0.875rem 1rem',
     background: theme.bg,
     border: `1px solid ${theme.border}`,
     borderRadius: '10px',
     color: theme.text,
     fontSize: '0.875rem',
-    transition: 'all 0.2s ease',
     fontFamily: 'inherit',
     outline: 'none',
-    boxSizing: 'border-box',
   },
-  
-  submitButton: {
-    width: '100%',
-    padding: '1rem',
-    background: theme.gradient,
-    border: 'none',
-    borderRadius: '10px',
-    color: 'white',
-    fontWeight: '600',
-    fontSize: '0.875rem',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    fontFamily: 'inherit',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '0.5rem',
-    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-  },
-  
-  /* Loading & Empty States */
-  loadingState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '4rem',
-  },
-  
-  spinner: {
-    width: '40px',
-    height: '40px',
-    border: `3px solid ${theme.border}`,
-    borderTop: `3px solid ${theme.accent}`,
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  
-  emptyState: {
-    textAlign: 'center',
-    padding: '4rem 2rem',
-  },
-  
-  emptyStateButton: {
+
+  agentSendBtn: {
     padding: '0.875rem 1.5rem',
-    background: theme.gradient,
+    background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
     border: 'none',
     borderRadius: '10px',
     color: 'white',
-    fontWeight: '600',
-    fontSize: '0.875rem',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontFamily: 'inherit',
-    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-  },
-  
-  /* Tasks List */
-  tasksList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem',
-  },
-  
-  taskWrapper: {
-    animation: 'fadeIn 0.3s ease',
-  },
-  
-  taskCard: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '1rem',
-    background: theme.surface,
-    padding: '1.25rem',
-    borderRadius: '12px',
-    border: `1px solid ${theme.border}`,
-    transition: 'all 0.2s ease',
-  },
-  
-  taskCardHover: {
-    background: theme.surfaceHover,
-    transform: 'translateY(-2px)',
-    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
-  },
-  
-  taskContent: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '1rem',
-    flex: 1,
-  },
-  
-  checkbox: {
-    width: '22px',
-    height: '22px',
-    borderRadius: '50%',
-    border: '2px solid',
-    background: 'transparent',
-    cursor: 'pointer',
-    flexShrink: 0,
-    marginTop: '2px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease',
-    padding: 0,
-  },
-  
-  checkmark: {
-    color: 'white',
-    fontSize: '13px',
-    fontWeight: '700',
-  },
-  
-  taskText: {
     fontSize: '1rem',
-    marginBottom: '0.5rem',
-    lineHeight: '1.5',
-    fontWeight: '500',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
   },
-  
-  taskMeta: {
+
+  aiLoaderContainer: {
     display: 'flex',
     alignItems: 'center',
-    gap: '1rem',
+    gap: '0.5rem',
+  },
+
+  aiLoaderText: {
     fontSize: '0.75rem',
     color: theme.textMuted,
-    flexWrap: 'wrap',
   },
-  
-  taskDate: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.25rem',
-  },
-  
-  overdueLabel: {
-    color: theme.danger,
-    marginLeft: '0.5rem',
-    fontWeight: '600',
-  },
-  
-  taskCategory: {
-    background: theme.glass,
-    border: `1px solid ${theme.glassBorder}`,
-    padding: '3px 10px',
-    borderRadius: '12px',
-    fontSize: '0.7rem',
-    fontWeight: '500',
-  },
-  
-  notesIndicator: {
-    color: theme.success,
-    fontWeight: '500',
-  },
-  
-  taskActions: {
-    display: 'flex',
-    gap: '0.5rem',
-    alignItems: 'center',
-  },
-  
-  aiButton: {
-    padding: '0.5rem 1rem',
-    background: theme.glass,
-    border: `1px solid ${theme.glassBorder}`,
-    color: theme.accent,
-    borderRadius: '8px',
-    fontSize: '0.75rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    whiteSpace: 'nowrap',
-    fontFamily: 'inherit',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.25rem',
-  },
-  
-  editButton: {
-    padding: '0.5rem',
-    background: 'transparent',
-    border: `1px solid ${theme.warning}`,
-    color: theme.warning,
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '0.875rem',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '36px',
-    height: '36px',
-  },
-  
-  deleteButton: {
-    padding: '0.5rem',
-    background: 'transparent',
-    border: `1px solid ${theme.danger}`,
-    color: theme.danger,
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '0.875rem',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '36px',
-    height: '36px',
-  },
-  
-  /* Edit Card */
-  editCard: {
-    background: 'rgba(99, 102, 241, 0.05)',
-    border: `1px solid ${theme.accent}`,
-    padding: '1.5rem',
-    borderRadius: '12px',
-  },
-  
-  editActions: {
-    display: 'flex',
-    gap: '0.5rem',
-    justifyContent: 'flex-end',
-  },
-  
-  saveButton: {
-    padding: '0.625rem 1.25rem',
-    background: theme.success,
-    border: 'none',
-    borderRadius: '8px',
-    color: 'white',
-    fontSize: '0.8rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    fontFamily: 'inherit',
-  },
-  
-  cancelButton: {
-    padding: '0.625rem 1.25rem',
-    background: 'transparent',
-    border: `1px solid ${theme.border}`,
-    borderRadius: '8px',
-    color: theme.textSecondary,
-    fontSize: '0.8rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    fontFamily: 'inherit',
-  },
-  
-  /* AI Suggestions Box */
-  suggestionsBox: {
-    background: 'rgba(99, 102, 241, 0.05)',
-    border: `1px solid ${theme.glassBorder}`,
-    padding: '1.25rem',
-    borderRadius: '12px',
-    marginTop: '0.5rem',
-    marginLeft: '3rem',
-    animation: 'fadeIn 0.3s ease',
-  },
-  
-  suggestionsHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '1rem',
-  },
-  
-  suggestionsTitle: {
-    fontSize: '0.8rem',
-    color: theme.accent,
-    fontWeight: '600',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  
-  suggestionsHint: {
-    fontSize: '0.7rem',
-    color: theme.textMuted,
-  },
-  
-  suggestionsContent: {
-    background: 'rgba(99, 102, 241, 0.03)',
-    padding: '1rem',
-    borderRadius: '8px',
-    marginBottom: '1rem',
-  },
-  
-  suggestionsList: {
-    margin: 0,
-    paddingLeft: '1.5rem',
-    fontSize: '0.875rem',
-    lineHeight: '1.7',
-    color: theme.textSecondary,
-  },
-  
-  suggestionsActions: {
-    display: 'flex',
-    gap: '0.5rem',
-    justifyContent: 'flex-end',
-  },
-  
-  saveNoteButton: {
-    padding: '0.5rem 1rem',
-    background: theme.success,
-    border: 'none',
-    color: 'white',
-    borderRadius: '8px',
-    fontSize: '0.75rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.25rem',
-    fontFamily: 'inherit',
-  },
-  
-  discardButton: {
-    padding: '0.5rem 1rem',
-    background: 'transparent',
-    border: `1px solid ${theme.border}`,
-    color: theme.textSecondary,
-    borderRadius: '8px',
-    fontSize: '0.75rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    fontFamily: 'inherit',
-  },
-  
-  /* Saved Notes Box */
-  notesBox: {
-    background: 'rgba(16, 185, 129, 0.05)',
-    border: `1px solid rgba(16, 185, 129, 0.2)`,
-    padding: '1.25rem',
-    borderRadius: '12px',
-    marginTop: '0.5rem',
-    marginLeft: '3rem',
-    animation: 'fadeIn 0.2s ease',
-  },
-  
-  notesTitle: {
-    fontSize: '0.8rem',
-    color: theme.success,
-    fontWeight: '600',
-    marginBottom: '1rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  
-  notesList: {
-    margin: 0,
-    paddingLeft: '1.5rem',
-    fontSize: '0.875rem',
-    lineHeight: '1.7',
-    color: theme.textMuted,
+
+  aiLoaderDot: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    background: theme.accent,
+    animation: 'aiPulse 1.4s ease-in-out infinite',
   },
 };
 
-/* ==================== CSS KEYFRAMES ==================== */
-
-const keyframesCSS = `
+/* Add keyframes for animations */
+const styleSheet = document.createElement("style");
+styleSheet.textContent = `
   @keyframes aiPulse {
-    0%, 80%, 100% { 
-      opacity: 0.3; 
-      transform: scale(0.8); 
-    }
-    40% { 
-      opacity: 1; 
-      transform: scale(1.3); 
-    }
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1.3); }
   }
-
   @keyframes fadeIn {
-    from { 
-      opacity: 0; 
-      transform: translateY(10px); 
-    }
-    to { 
-      opacity: 1; 
-      transform: translateY(0); 
-    }
-  }
-
-  @keyframes fadeOut {
-    from { 
-      opacity: 1; 
-      transform: scale(1); 
-    }
-    to { 
-      opacity: 0; 
-      transform: scale(0.95); 
-    }
-  }
-
-  @keyframes slideIn {
-    from { 
-      transform: translateX(-10px); 
-      opacity: 0; 
-    }
-    to { 
-      transform: translateX(0); 
-      opacity: 1; 
-    }
-  }
-
-  @keyframes spin {
-    to { 
-      transform: rotate(360deg); 
-    }
-  }
-
-  button:hover {
-    transform: translateY(-1px);
-  }
-
-  button:active {
-    transform: translateY(0);
-  }
-
-  input:focus {
-    border-color: ${theme.accent};
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-  }
-
-  .${styles.createButton.constructor.name}:hover {
-    background: ${theme.gradientHover};
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
-  }
-
-  .${styles.navButton.constructor.name}:hover {
-    background: ${theme.glass};
-    color: ${theme.accent};
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 `;
+document.head.appendChild(styleSheet);
 
 export default Todo;
