@@ -1,0 +1,30 @@
+todo-app-refactored/
+├── todo-app-refactored
+├── ARCHITECTURE.md
+├── FILE_TREE.txt
+├── MIGRATION.md
+├── README.md
+├── SUMMARY.md
+├── Todo.jsx
+├── components
+│   ├── components/AddTaskForm.jsx
+│   ├── components/AgentChat.jsx
+│   ├── components/CategoryBar.jsx
+│   ├── components/FilterBar.jsx
+│   ├── components/TaskItem.jsx
+│   ├── components/TaskList.jsx
+│   ├── components/TaskStats.jsx
+├── hooks
+│   ├── hooks/useAgent.js
+│   ├── hooks/useOllama.js
+│   ├── hooks/useTodos.js
+├── index.js
+├── services
+│   ├── services/ollamaClient.js
+│   ├── services/taskAgent.js
+├── styles
+│   ├── styles/styles.js
+│   ├── styles/theme.js
+├── utils
+│   ├── utils/dateUtils.js
+├── {components,services,utils,styles,hooks}

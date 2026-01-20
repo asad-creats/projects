@@ -184,6 +184,18 @@ class TaskAgent {
           type: 'object',
           properties: {}
         }
+      },
+      {
+        name: 'get_task_suggestions',
+        description: 'Get AI suggestions on how to accomplish a specific task, break it down into steps, or provide helpful tips',
+        parameters: {
+          type: 'object',
+          properties: {
+            taskText: { type: 'string', description: 'The task to get suggestions for' },
+            taskId: { type: 'number', description: 'The task ID if available' }
+          },
+          required: ['taskText']
+        }
       }
     ];
   }
@@ -208,6 +220,9 @@ class TaskAgent {
       
       case 'suggest_priorities':
         return this.suggestPriorities();
+      
+      case 'get_task_suggestions':
+        return this.getTaskSuggestions(args.taskText, args.taskId);
       
       default:
         return { error: `Unknown tool: ${toolName}` };
@@ -421,7 +436,37 @@ class TaskAgent {
     };
   }
 
-  // Process user query with Ollama
+  async getTaskSuggestions(taskText, taskId) {
+    try {
+      // Use Ollama to generate suggestions
+      const prompt = `Provide helpful, actionable suggestions for this task: "${taskText}"
+
+Please provide:
+1. A brief breakdown of how to approach this task
+2. 2-3 specific action steps
+3. Any helpful tips or resources
+
+Keep it concise and practical. Format as a short paragraph followed by bullet points.`;
+
+      const suggestions = await this.ollama.chat([
+        { role: 'user', content: prompt }
+      ], this.model);
+
+      return {
+        success: true,
+        taskText,
+        taskId,
+        suggestions: suggestions.trim()
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to generate suggestions: ${error.message}`
+      };
+    }
+  }
+
+  // Process user query with Ollama - UPDATED TO SUPPORT BATCH OPERATIONS
   async processQuery(userMessage, conversationHistory = []) {
     try {
       // Build system prompt with current task context
@@ -435,12 +480,24 @@ Current task summary:
 Available tools:
 ${JSON.stringify(this.tools, null, 2)}
 
-When the user asks you to perform an action, respond with a JSON object containing:
+When the user asks you to perform ONE action, respond with a JSON object:
 {
   "action": "tool_name",
   "parameters": { /* tool parameters */ },
   "response": "Your natural language response to the user"
 }
+
+When the user asks you to perform MULTIPLE actions (like creating several tasks), respond with a JSON array of actions:
+[
+  {
+    "action": "create_task",
+    "parameters": { "text": "task 1", "date": "2026-01-18", "category": "Personal" }
+  },
+  {
+    "action": "create_task",
+    "parameters": { "text": "task 2", "date": "2026-01-19", "category": "Personal" }
+  }
+]
 
 If no tool is needed, respond with:
 {
@@ -448,7 +505,13 @@ If no tool is needed, respond with:
   "response": "Your natural language response"
 }
 
-Keep responses concise and helpful. Today's date is ${getTodayString()}.`;
+IMPORTANT: When creating multiple tasks:
+1. Return a JSON array (not an object)
+2. Each array item should have "action" and "parameters"
+3. Calculate the correct dates based on today's date (${getTodayString()})
+4. For recurring tasks like "every day next week", create individual tasks for each day
+
+Keep responses concise and helpful.`;
 
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -474,18 +537,87 @@ Keep responses concise and helpful. Today's date is ${getTodayString()}.`;
         };
       }
 
-      // Execute tool if needed
-      let toolResult = null;
-      if (parsed.action && parsed.action !== 'none') {
-        toolResult = await this.executeTool(parsed.action, parsed.parameters || {});
-      }
+      // Handle both single actions and arrays of actions
+      let toolResults = [];
+      let actions = [];
+      
+      if (Array.isArray(parsed)) {
+        // Multiple actions - execute each one
+        for (const item of parsed) {
+          if (item.action && item.action !== 'none') {
+            actions.push(item.action);
+            try {
+              const result = await this.executeTool(item.action, item.parameters || {});
+              toolResults.push(result);
+              
+              // Small delay to ensure database updates propagate
+              await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (error) {
+              toolResults.push({ success: false, error: error.message });
+            }
+          }
+        }
+        
+        // Generate summary response
+        const successCount = toolResults.filter(r => r.success).length;
+        const totalCount = parsed.length;
+        
+        let summaryResponse = '';
+        if (successCount === totalCount) {
+          summaryResponse = `✅ Successfully created all ${totalCount} tasks!`;
+        } else if (successCount === 0) {
+          summaryResponse = `❌ Failed to create tasks. Errors: ${toolResults.map(r => r.error).filter(Boolean).join(', ')}`;
+        } else {
+          summaryResponse = `⚠️ Completed ${successCount} of ${totalCount} tasks. ${totalCount - successCount} failed.`;
+        }
+        
+        // Add details about what was created
+        const successfulTasks = toolResults
+          .filter(r => r.success)
+          .map(r => r.message)
+          .join('\n');
+        
+        if (successfulTasks) {
+          summaryResponse += '\n\n' + successfulTasks;
+        }
+        
+        // Add error details if any
+        const errors = toolResults
+          .filter(r => !r.success)
+          .map(r => `❌ ${r.error}`)
+          .join('\n');
+        
+        if (errors) {
+          summaryResponse += '\n\n' + errors;
+        }
+        
+        return {
+          response: summaryResponse,
+          action: 'batch',
+          actions: actions,
+          toolResult: toolResults,
+          fullResponse: response
+        };
+      } else {
+        // Single action
+        let toolResult = null;
+        if (parsed.action && parsed.action !== 'none') {
+          try {
+            toolResult = await this.executeTool(parsed.action, parsed.parameters || {});
+            actions.push(parsed.action);
+          } catch (error) {
+            toolResult = { success: false, error: error.message };
+          }
+        }
 
-      return {
-        response: parsed.response || response,
-        action: parsed.action,
-        toolResult,
-        fullResponse: response
-      };
+        return {
+          response: parsed.response || response,
+          action: parsed.action,
+          actions: actions,
+          toolResult: toolResult ? [toolResult] : null,
+          fullResponse: response
+        };
+      }
     } catch (error) {
       console.error('Error processing query:', error);
       return {
@@ -507,6 +639,8 @@ function Todo() {
   const [agentInput, setAgentInput] = useState('');
   const [agentMessages, setAgentMessages] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(null);
+  const [taskSuggestions, setTaskSuggestions] = useState({});
   const [ollamaModels, setOllamaModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('llama3.2');
   const [ollamaConnected, setOllamaConnected] = useState(false);
@@ -584,7 +718,9 @@ function Todo() {
         .single();
 
       if (error) throw error;
-      setTodos([...todos, data]);
+      
+      // Immediately update state
+      setTodos(prevTodos => [...prevTodos, data]);
       return data;
     } catch (error) {
       console.error('Error adding todo:', error);
@@ -600,7 +736,7 @@ function Todo() {
         .eq('id', id);
 
       if (error) throw error;
-      setTodos(todos.map(todo => 
+      setTodos(prevTodos => prevTodos.map(todo => 
         todo.id === id ? { ...todo, completed: !todo.completed } : todo
       ));
     } catch (error) {
@@ -616,7 +752,7 @@ function Todo() {
         .eq('id', id);
 
       if (error) throw error;
-      setTodos(todos.filter(todo => todo.id !== id));
+      setTodos(prevTodos => prevTodos.filter(todo => todo.id !== id));
     } catch (error) {
       console.error('Error deleting todo:', error);
     }
@@ -628,7 +764,13 @@ function Todo() {
     if (!newTaskText.trim()) return;
 
     try {
-      await addTodo(newTaskText, newTaskDate, newTaskCategory);
+      const newTask = await addTodo(newTaskText, newTaskDate, newTaskCategory);
+      
+      // Show suggestions option for the newly created task
+      if (ollamaConnected && newTask) {
+        setShowSuggestions(newTask.id);
+      }
+      
       setNewTaskText('');
       setNewTaskDate(getTodayString());
       setNewTaskCategory('General');
@@ -637,7 +779,36 @@ function Todo() {
     }
   };
 
-  // Initialize agent with current todos
+  // Get AI suggestions for a task
+  const handleGetSuggestions = async (taskId, taskText) => {
+    if (!ollamaConnected) return;
+    
+    setLoadingSuggestions(taskId);
+    
+    try {
+      const result = await agentRef.current.getTaskSuggestions(taskText, taskId);
+      
+      if (result.success) {
+        setTaskSuggestions(prev => ({
+          ...prev,
+          [taskId]: result.suggestions
+        }));
+      }
+    } catch (error) {
+      console.error('Error getting suggestions:', error);
+    } finally {
+      setLoadingSuggestions(null);
+    }
+  };
+
+  // Save suggestions to task (could store in notes field or separate table)
+  const handleSaveSuggestions = async (taskId) => {
+    // For now, just dismiss the suggestions
+    // In a full implementation, you might save these to a notes field in the database
+    setShowSuggestions(null);
+  };
+
+  // Initialize agent with current todos - removed todos from deps to prevent recreation
   useEffect(() => {
     agentRef.current = new TaskAgent(
       todos, 
@@ -647,7 +818,14 @@ function Todo() {
       deleteTodo,
       selectedModel
     );
-  }, [todos, selectedModel]);
+  }, [selectedModel]);
+  
+  // Update agent's todos reference when todos change
+  useEffect(() => {
+    if (agentRef.current) {
+      agentRef.current.todos = todos;
+    }
+  }, [todos]);
 
   // Handle agent message
   const handleAgentMessage = async (message) => {
@@ -881,43 +1059,113 @@ function Todo() {
               </div>
             ) : (
               filteredTodos.map(todo => (
-                <div
-                  key={todo.id}
-                  style={{
-                    ...styles.taskCard,
-                    ...(isOverdue(todo.date, todo.completed) ? styles.taskCardOverdue : {})
-                  }}
-                >
-                  <div style={styles.taskContent}>
-                    <input
-                      type="checkbox"
-                      checked={todo.completed}
-                      onChange={() => toggleTodo(todo.id, todo.completed)}
-                      style={styles.checkbox}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{
-                        ...styles.taskText,
-                        ...(todo.completed ? styles.taskTextCompleted : {})
-                      }}>
-                        {todo.text}
+                <div key={todo.id}>
+                  <div
+                    style={{
+                      ...styles.taskCard,
+                      ...(isOverdue(todo.date, todo.completed) ? styles.taskCardOverdue : {})
+                    }}
+                  >
+                    <div style={styles.taskContent}>
+                      <input
+                        type="checkbox"
+                        checked={todo.completed}
+                        onChange={() => toggleTodo(todo.id, todo.completed)}
+                        style={styles.checkbox}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          ...styles.taskText,
+                          ...(todo.completed ? styles.taskTextCompleted : {})
+                        }}>
+                          {todo.text}
+                        </div>
+                        <div style={styles.taskMeta}>
+                          <span style={styles.taskCategory}>{todo.category}</span>
+                          <span style={styles.taskDate}>
+                            {formatDate(todo.date)}
+                            {isOverdue(todo.date, todo.completed) && ' ⚠️'}
+                          </span>
+                        </div>
                       </div>
-                      <div style={styles.taskMeta}>
-                        <span style={styles.taskCategory}>{todo.category}</span>
-                        <span style={styles.taskDate}>
-                          {formatDate(todo.date)}
-                          {isOverdue(todo.date, todo.completed) && ' ⚠️'}
-                        </span>
+                      <div style={styles.taskActions}>
+                        {ollamaConnected && (
+                          <button
+                            onClick={() => {
+                              if (taskSuggestions[todo.id]) {
+                                setShowSuggestions(showSuggestions === todo.id ? null : todo.id);
+                              } else {
+                                handleGetSuggestions(todo.id, todo.text);
+                                setShowSuggestions(todo.id);
+                              }
+                            }}
+                            style={styles.suggestionButton}
+                            title="Get AI suggestions"
+                            disabled={loadingSuggestions === todo.id}
+                          >
+                            {loadingSuggestions === todo.id ? '⏳' : '💡'}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => deleteTodo(todo.id)}
+                          style={styles.deleteButton}
+                          title="Delete task"
+                        >
+                          🗑️
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={() => deleteTodo(todo.id)}
-                      style={styles.deleteButton}
-                      title="Delete task"
-                    >
-                      🗑️
-                    </button>
                   </div>
+                  
+                  {/* Suggestions Panel */}
+                  {showSuggestions === todo.id && (
+                    <div style={styles.suggestionsPanel}>
+                      <div style={styles.suggestionsPanelHeader}>
+                        <span style={styles.suggestionsPanelTitle}>💡 AI Suggestions</span>
+                        <button
+                          onClick={() => setShowSuggestions(null)}
+                          style={styles.closeSuggestionsBtn}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      
+                      {loadingSuggestions === todo.id ? (
+                        <div style={styles.suggestionsLoading}>
+                          <div style={styles.aiLoaderContainer}>
+                            <div style={styles.aiLoaderText}>Generating suggestions</div>
+                            <div style={{...styles.aiLoaderDot, animationDelay: '0s'}} />
+                            <div style={{...styles.aiLoaderDot, animationDelay: '0.2s'}} />
+                            <div style={{...styles.aiLoaderDot, animationDelay: '0.4s'}} />
+                          </div>
+                        </div>
+                      ) : taskSuggestions[todo.id] ? (
+                        <>
+                          <div style={styles.suggestionsContent}>
+                            {taskSuggestions[todo.id]}
+                          </div>
+                          <div style={styles.suggestionsActions}>
+                            <button
+                              onClick={() => handleSaveSuggestions(todo.id)}
+                              style={styles.saveSuggestionsBtn}
+                            >
+                              ✓ Got it
+                            </button>
+                            <button
+                              onClick={() => handleGetSuggestions(todo.id, todo.text)}
+                              style={styles.regenerateSuggestionsBtn}
+                            >
+                              🔄 Regenerate
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={styles.suggestionsContent}>
+                          Click the lightbulb to get AI suggestions for this task!
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))
             )}
@@ -983,9 +1231,13 @@ function Todo() {
                   )}
                 </div>
                 <div style={styles.messageContent}>{msg.content}</div>
-                {msg.toolResult && (
-                  <div style={styles.reasoningBadge}>
-                    Result: {JSON.stringify(msg.toolResult, null, 2)}
+                {msg.toolResult && msg.toolResult.length > 0 && (
+                  <div style={styles.toolResults}>
+                    {msg.toolResult.map((result, i) => (
+                      <div key={i} style={styles.toolResultItem}>
+                        {result.success ? '✅' : '❌'} {result.message || result.error}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1300,6 +1552,22 @@ const styles = {
     gap: '1rem',
   },
 
+  taskActions: {
+    display: 'flex',
+    gap: '0.5rem',
+    alignItems: 'center',
+  },
+
+  suggestionButton: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '1.25rem',
+    opacity: 0.6,
+    transition: 'all 0.2s ease',
+    padding: '0.25rem',
+  },
+
   checkbox: {
     width: '20px',
     height: '20px',
@@ -1341,6 +1609,84 @@ const styles = {
     fontSize: '1.25rem',
     opacity: 0.6,
     transition: 'opacity 0.2s ease',
+  },
+
+  suggestionsPanel: {
+    marginTop: '0.5rem',
+    background: theme.agentBg,
+    border: `1px solid ${theme.agentBorder}`,
+    borderRadius: '12px',
+    padding: '1rem',
+    animation: 'fadeIn 0.3s ease',
+  },
+
+  suggestionsPanelHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '0.75rem',
+  },
+
+  suggestionsPanelTitle: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#8b5cf6',
+  },
+
+  closeSuggestionsBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: theme.textMuted,
+    cursor: 'pointer',
+    fontSize: '1.25rem',
+    padding: '0',
+    opacity: 0.6,
+    transition: 'opacity 0.2s ease',
+  },
+
+  suggestionsContent: {
+    fontSize: '0.875rem',
+    lineHeight: '1.6',
+    color: theme.text,
+    whiteSpace: 'pre-wrap',
+    marginBottom: '1rem',
+  },
+
+  suggestionsLoading: {
+    padding: '2rem',
+    textAlign: 'center',
+  },
+
+  suggestionsActions: {
+    display: 'flex',
+    gap: '0.5rem',
+    justifyContent: 'flex-end',
+  },
+
+  saveSuggestionsBtn: {
+    padding: '0.5rem 1rem',
+    background: theme.accent,
+    border: 'none',
+    borderRadius: '8px',
+    color: 'white',
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
+  },
+
+  regenerateSuggestionsBtn: {
+    padding: '0.5rem 1rem',
+    background: 'transparent',
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.textSecondary,
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
   },
 
   emptyState: {
@@ -1469,11 +1815,17 @@ const styles = {
     whiteSpace: 'pre-wrap',
   },
 
-  reasoningBadge: {
-    marginTop: '0.5rem',
-    fontSize: '0.7rem',
-    color: theme.textMuted,
-    fontStyle: 'italic',
+  toolResults: {
+    marginTop: '0.75rem',
+    padding: '0.75rem',
+    background: 'rgba(139, 92, 246, 0.05)',
+    borderRadius: '8px',
+    fontSize: '0.75rem',
+  },
+
+  toolResultItem: {
+    padding: '0.25rem 0',
+    color: theme.textSecondary,
   },
 
   quickActions: {
@@ -1563,4 +1915,4 @@ styleSheet.textContent = `
 `;
 document.head.appendChild(styleSheet);
 
-export default Todo;
+export { default } from '../todo-app-refactored/Todo';
