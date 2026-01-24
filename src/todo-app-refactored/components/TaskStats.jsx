@@ -1,8 +1,32 @@
 import React from 'react';
 import { styles } from '../styles/styles';
 import { theme } from '../styles/theme';
+import { SkeletonLoader } from './SkeletonLoader';
 
-export const TaskStats = ({ stats }) => {
+export const TaskStats = ({ stats, loading = false }) => {
+  if (loading) {
+    return (
+      <div style={styles.statsGrid}>
+        <div style={styles.statCard}>
+          <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
+          <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
+        </div>
+        <div style={styles.statCard}>
+          <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
+          <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
+        </div>
+        <div style={styles.statCard}>
+          <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
+          <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
+        </div>
+        <div style={styles.statCard}>
+          <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
+          <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={styles.statsGrid}>
       <div style={styles.statCard}>

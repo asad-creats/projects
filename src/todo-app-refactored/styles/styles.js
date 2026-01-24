@@ -404,6 +404,17 @@ export const styles = {
     fontSize: '1.25rem',
   },
 
+  globalLoader: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '4px',
+    background: 'linear-gradient(90deg, transparent, #6366f1, transparent)',
+    animation: 'globalLoad 1.5s linear infinite',
+    zIndex: 9999,
+  },
+
   /* Agent Chat */
   agentContainer: {
     background: theme.surface,
@@ -613,6 +624,15 @@ styleSheet.textContent = `
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes globalLoad {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(0%); }
+    100% { transform: translateX(100%); }
+  }
+  @keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
   }
 `;
 document.head.appendChild(styleSheet);

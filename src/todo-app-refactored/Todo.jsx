@@ -150,7 +150,7 @@ function Todo() {
       <div style={styles.mainGrid}>
         {/* Left Panel - Tasks */}
         <div style={styles.leftPanel}>
-          <TaskStats stats={stats} />
+          <TaskStats stats={stats} loading={loading} />
           
           <AddTaskForm
             newTaskText={newTaskText}
@@ -181,6 +181,7 @@ function Todo() {
             onCloseSuggestions={() => setShowSuggestions(null)}
             onRegenerateSuggestions={handleGetSuggestions}
             ollamaConnected={ollamaConnected}
+            loading={loading}
           />
         </div>
 

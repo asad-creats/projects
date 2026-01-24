@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
-import Todo from './pages/Todo';
+import Todo from './todo-app-refactored/Todo';
 import Weather from './pages/Weather';
 import Notes from './pages/Notes';
 import Calculator from './pages/Calculator';
