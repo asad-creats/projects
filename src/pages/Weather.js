@@ -25,17 +25,20 @@ function Weather() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // IMPORTANT: Replace with your own API key from https://openweathermap.org/api
-  // Free tier: 1,000 calls/day, uses API v2.5
-  // New keys take 1-2 hours to activate after signup
-  const API_KEY = '0b8622e1ac45fb603d4362b3a8c43c34';
+  // Set REACT_APP_OPENWEATHER_API_KEY in your environment.
+  // Get a free key at https://openweathermap.org/api (1,000 calls/day, v2.5)
+  const API_KEY = process.env.REACT_APP_OPENWEATHER_API_KEY;
 
   const fetchWeather = async () => {
     if (!city.trim()) {
       setError('Please enter a city name');
       return;
     }
-    
+    if (!API_KEY) {
+      setError('Weather API key not configured. Set REACT_APP_OPENWEATHER_API_KEY in your environment.');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setWeather(null);

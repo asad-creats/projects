@@ -63,8 +63,8 @@ function Todo() {
     try {
       const newTask = await addTodo(newTaskText, newTaskDate, newTaskCategory);
       
-      // Show suggestions option for the newly created task
-      if (ollamaConnected && newTask) {
+      // Show suggestions option for the newly created task if any AI is available
+      if (newTask && (ollamaConnected || process.env.REACT_APP_GEMINI_API_KEY)) {
         setShowSuggestions(newTask.id);
       }
       
@@ -94,6 +94,14 @@ function Todo() {
     'Suggest priorities',
     'Add a task to review budget'
   ];
+
+  // AI availability — either provider works
+  const geminiReady = !!process.env.REACT_APP_GEMINI_API_KEY;
+  const aiAvailable = ollamaConnected || geminiReady;
+  const activeProvider =
+    selectedProvider === 'gemini' && geminiReady ? 'gemini' :
+    ollamaConnected ? 'ollama' :
+    geminiReady ? 'gemini' : null;
 
   // Filter todos
   const filteredTodos = useMemo(() => {
@@ -129,8 +137,9 @@ function Todo() {
         <div>
           <h1 style={styles.title}>✨ AI Task Manager</h1>
           <p style={styles.subtitle}>
-            Powered by Ollama {ollamaConnected ? '🟢' : '🔴'} 
-            {ollamaConnected && ` - ${selectedModel}`}
+            {activeProvider === 'ollama' && <>Powered by Ollama 🟢 — {selectedModel}</>}
+            {activeProvider === 'gemini' && <>Powered by Gemini 🟢 — gemini-1.5-pro</>}
+            {!activeProvider && <>No AI provider connected 🔴</>}
           </p>
         </div>
         <Link to="/" style={styles.backButton}>
@@ -138,13 +147,13 @@ function Todo() {
         </Link>
       </div>
 
-      {!ollamaConnected && (
+      {!aiAvailable && (
         <div style={styles.warningBanner}>
-          <strong>⚠️ Ollama not connected</strong>
+          <strong>⚠️ No AI provider available</strong>
           <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
-            Make sure Ollama is running on localhost:11434. 
-            <br />
-            Install from <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" style={{ color: theme.accent }}>ollama.ai</a>
+            Run Ollama locally on <code>localhost:11434</code> (install from{' '}
+            <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" style={{ color: theme.accent }}>ollama.ai</a>),
+            {' '}or set <code>REACT_APP_GEMINI_API_KEY</code> in your environment to use Gemini.
           </p>
         </div>
       )}
@@ -182,7 +191,7 @@ function Todo() {
             taskSuggestions={taskSuggestions}
             onCloseSuggestions={() => setShowSuggestions(null)}
             onRegenerateSuggestions={handleGetSuggestions}
-            ollamaConnected={ollamaConnected}
+            ollamaConnected={aiAvailable}
             loading={loading}
           />
         </div>

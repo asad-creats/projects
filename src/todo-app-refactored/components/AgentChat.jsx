@@ -17,6 +17,10 @@ export const AgentChat = ({
 }) => {
   const messagesEndRef = useRef(null);
 
+  // Provider is ready if Ollama is selected and connected, OR Gemini is selected and has a key
+  const geminiReady = !!process.env.REACT_APP_GEMINI_API_KEY;
+  const providerReady = selectedProvider === 'ollama' ? ollamaConnected : geminiReady;
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -60,7 +64,7 @@ export const AgentChat = ({
         <div style={styles.agentBadge}>
           {selectedProvider === 'ollama'
             ? (ollamaConnected ? '🏠 Ollama Connected' : '🏠 Ollama Disconnected')
-            : (import.meta.env.VITE_GEMINI_API_KEY ? '🌟 Gemini Ready' : '⚠️ Gemini Key Missing')}
+            : (process.env.REACT_APP_GEMINI_API_KEY ? '🌟 Gemini Ready' : '⚠️ Gemini Key Missing')}
         </div>
       </div>
 
@@ -129,7 +133,7 @@ export const AgentChat = ({
               key={idx}
               onClick={() => onSendMessage(action)}
               style={styles.quickActionBtn}
-              disabled={!ollamaConnected}
+              disabled={!providerReady}
             >
               {action}
             </button>
@@ -142,15 +146,21 @@ export const AgentChat = ({
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && onSendMessage(input)}
-          placeholder={ollamaConnected ? "Ask me anything..." : "Waiting for Ollama connection..."}
+          onKeyPress={(e) => e.key === 'Enter' && providerReady && !aiLoading && onSendMessage(input)}
+          placeholder={
+            providerReady
+              ? "Ask me anything..."
+              : selectedProvider === 'ollama'
+                ? "Waiting for Ollama connection..."
+                : "Add REACT_APP_GEMINI_API_KEY to use Gemini"
+          }
           style={styles.agentInputField}
-          disabled={!ollamaConnected || aiLoading}
+          disabled={!providerReady || aiLoading}
         />
         <button
           onClick={() => onSendMessage(input)}
           style={styles.agentSendBtn}
-          disabled={!ollamaConnected || aiLoading || !input.trim()}
+          disabled={!providerReady || aiLoading || !input.trim()}
         >
           Send
         </button>

@@ -12,34 +12,41 @@ export const useAgent = (todos, setTodos, addTodo, toggleTodo, deleteTodo, selec
 
   const agentRef = useRef(null);
 
-  // Initialize agent with current model
+  // Keep latest callbacks in refs so we don't have to recreate the agent on every render
+  const callbacksRef = useRef({ setTodos, addTodo, toggleTodo, deleteTodo });
+  useEffect(() => {
+    callbacksRef.current = { setTodos, addTodo, toggleTodo, deleteTodo };
+  }, [setTodos, addTodo, toggleTodo, deleteTodo]);
+
+  // (Re)initialize agent only when provider/model/connection state changes
   useEffect(() => {
     // Determine the actual provider to use
     let effectiveProvider = selectedProvider;
-    // Only allow gemini if API key is configured
-    if (selectedProvider === 'gemini' && !import.meta.env.VITE_GEMINI_API_KEY) {
+    if (selectedProvider === 'gemini' && !process.env.REACT_APP_GEMINI_API_KEY) {
       effectiveProvider = ollamaConnected ? 'ollama' : 'gemini';
     } else if (selectedProvider === 'ollama' && !ollamaConnected) {
       effectiveProvider = 'gemini';
     }
 
     const config = {
-      apiKey: import.meta.env.VITE_GEMINI_API_KEY,
+      apiKey: process.env.REACT_APP_GEMINI_API_KEY,
       provider: effectiveProvider,
       model: effectiveProvider === 'ollama' ? selectedModel : 'gemini-1.5-pro'
     };
 
+    const cb = callbacksRef.current;
     agentRef.current = new TaskAgent(
       todos,
-      setTodos,
-      addTodo,
-      toggleTodo,
-      deleteTodo,
+      cb.setTodos,
+      cb.addTodo,
+      cb.toggleTodo,
+      cb.deleteTodo,
       config
     );
-  }, [todos, setTodos, addTodo, toggleTodo, deleteTodo, selectedModel, ollamaConnected, selectedProvider]);
-  
-  // Update agent's todos reference when todos change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedModel, ollamaConnected, selectedProvider]);
+
+  // Update agent's todos reference when todos change (no agent re-creation)
   useEffect(() => {
     if (agentRef.current) {
       agentRef.current.todos = todos;
@@ -47,7 +54,15 @@ export const useAgent = (todos, setTodos, addTodo, toggleTodo, deleteTodo, selec
   }, [todos]);
 
   const handleAgentMessage = async (message) => {
-    if (!message.trim()) return;
+    if (!message.trim() || aiLoading) return;
+    if (!agentRef.current) {
+      setAgentMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'AI assistant is not ready yet. Please wait a moment and try again.',
+        timestamp: new Date().toISOString()
+      }]);
+      return;
+    }
 
     const userMessage = {
       role: 'user',
