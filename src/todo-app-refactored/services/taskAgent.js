@@ -165,6 +165,8 @@ export class TaskAgent {
       case 'today':
         filtered = this.todos.filter(t => t.date === today && !t.completed);
         break;
+      default:
+        break;
     }
 
     return {

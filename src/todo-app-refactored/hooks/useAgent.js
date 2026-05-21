@@ -37,7 +37,7 @@ export const useAgent = (todos, setTodos, addTodo, toggleTodo, deleteTodo, selec
       deleteTodo,
       config
     );
-  }, [selectedModel, ollamaConnected, selectedProvider]);
+  }, [todos, setTodos, addTodo, toggleTodo, deleteTodo, selectedModel, ollamaConnected, selectedProvider]);
   
   // Update agent's todos reference when todos change
   useEffect(() => {

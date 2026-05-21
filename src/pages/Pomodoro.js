@@ -31,7 +31,7 @@ function Pomodoro() {
       }
     }
     return () => clearInterval(interval);
-  }, [isActive, time, isBreak]);
+  }, [isActive, time, isBreak, breakMinutes, workMinutes]);
 
   const toggleTimer = () => {
     setIsActive(!isActive);
