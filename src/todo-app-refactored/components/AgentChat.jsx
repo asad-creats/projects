@@ -11,7 +11,9 @@ export const AgentChat = ({
   ollamaModels,
   selectedModel,
   setSelectedModel,
-  quickActions
+  quickActions,
+  selectedProvider,
+  setSelectedProvider
 }) => {
   const messagesEndRef = useRef(null);
 
@@ -32,7 +34,17 @@ export const AgentChat = ({
             Ask me anything about your tasks
           </div>
         </div>
-        {ollamaConnected && ollamaModels.length > 1 && (
+        <div style={styles.providerSelector}>
+          <select
+            value={selectedProvider}
+            onChange={(e) => setSelectedProvider(e.target.value)}
+            style={styles.providerSelect}
+          >
+            <option value="ollama">🏠 Ollama (Local)</option>
+            <option value="gemini">🌟 Gemini (Cloud)</option>
+          </select>
+        </div>
+        {selectedProvider === 'ollama' && ollamaConnected && ollamaModels.length > 1 && (
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
@@ -46,7 +58,9 @@ export const AgentChat = ({
           </select>
         )}
         <div style={styles.agentBadge}>
-          {ollamaConnected ? 'Connected' : 'Disconnected'}
+          {selectedProvider === 'ollama'
+            ? (ollamaConnected ? '🏠 Ollama Connected' : '🏠 Ollama Disconnected')
+            : (import.meta.env.VITE_GEMINI_API_KEY ? '🌟 Gemini Ready' : '⚠️ Gemini Key Missing')}
         </div>
       </div>
 

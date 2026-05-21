@@ -50,7 +50,9 @@ function Todo() {
     setShowSuggestions,
     loadingSuggestions,
     taskSuggestions,
-    handleGetSuggestions
+    handleGetSuggestions,
+    selectedProvider,
+    setSelectedProvider
   } = useAgent(todos, setTodos, addTodo, toggleTodo, deleteTodo, selectedModel, ollamaConnected);
 
   // Handle manual task creation
@@ -197,6 +199,8 @@ function Todo() {
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
           quickActions={quickActions}
+          selectedProvider={selectedProvider}
+          setSelectedProvider={setSelectedProvider}
         />
       </div>
     </div>

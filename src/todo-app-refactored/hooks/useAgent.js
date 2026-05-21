@@ -8,26 +8,36 @@ export const useAgent = (todos, setTodos, addTodo, toggleTodo, deleteTodo, selec
   const [showSuggestions, setShowSuggestions] = useState(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(null);
   const [taskSuggestions, setTaskSuggestions] = useState({});
-  
+  const [selectedProvider, setSelectedProvider] = useState('ollama'); // Default to ollama
+
   const agentRef = useRef(null);
 
   // Initialize agent with current model
   useEffect(() => {
+    // Determine the actual provider to use
+    let effectiveProvider = selectedProvider;
+    // Only allow gemini if API key is configured
+    if (selectedProvider === 'gemini' && !import.meta.env.VITE_GEMINI_API_KEY) {
+      effectiveProvider = ollamaConnected ? 'ollama' : 'gemini';
+    } else if (selectedProvider === 'ollama' && !ollamaConnected) {
+      effectiveProvider = 'gemini';
+    }
+
     const config = {
       apiKey: import.meta.env.VITE_GEMINI_API_KEY,
-      provider: ollamaConnected ? 'ollama' : 'gemini',
-      model: ollamaConnected ? selectedModel : 'gemini-1.5-pro'
+      provider: effectiveProvider,
+      model: effectiveProvider === 'ollama' ? selectedModel : 'gemini-1.5-pro'
     };
 
     agentRef.current = new TaskAgent(
-      todos, 
-      setTodos, 
-      addTodo, 
-      toggleTodo, 
+      todos,
+      setTodos,
+      addTodo,
+      toggleTodo,
       deleteTodo,
       config
     );
-  }, [selectedModel, ollamaConnected]);
+  }, [selectedModel, ollamaConnected, selectedProvider]);
   
   // Update agent's todos reference when todos change
   useEffect(() => {
@@ -109,6 +119,8 @@ export const useAgent = (todos, setTodos, addTodo, toggleTodo, deleteTodo, selec
     setShowSuggestions,
     loadingSuggestions,
     taskSuggestions,
-    handleGetSuggestions
+    handleGetSuggestions,
+    selectedProvider,
+    setSelectedProvider
   };
 };

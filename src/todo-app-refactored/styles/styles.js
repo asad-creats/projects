@@ -459,6 +459,22 @@ export const styles = {
     fontFamily: 'inherit',
   },
 
+  providerSelector: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+  },
+
+  providerSelect: {
+    padding: '0.5rem',
+    background: theme.bg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.text,
+    fontSize: '0.75rem',
+    fontFamily: 'inherit',
+  },
+
   agentBadge: {
     padding: '0.5rem 1rem',
     background: 'rgba(139, 92, 246, 0.15)',
