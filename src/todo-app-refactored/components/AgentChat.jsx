@@ -13,24 +13,27 @@ export const AgentChat = ({
   setSelectedModel,
   quickActions,
   selectedProvider,
-  setSelectedProvider
+  setSelectedProvider,
+  isNarrow
 }) => {
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
 
   // Provider is ready if Ollama is selected and connected, OR Gemini is selected and has a key
   const geminiReady = !!process.env.REACT_APP_GEMINI_API_KEY;
   const providerReady = selectedProvider === 'ollama' ? ollamaConnected : geminiReady;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // Scroll only the chat container — NOT the whole page (scrollIntoView would
+  // hijack the window scroll and push the header off-screen on load).
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [messages, aiLoading]);
 
   return (
-    <div style={styles.agentContainer}>
+    <div style={{ ...styles.agentContainer, height: isNarrow ? '70vh' : styles.agentContainer.height }}>
       <div style={styles.agentHeader}>
         <div>
           <div style={styles.agentTitle}>🤖 AI Assistant</div>
@@ -68,7 +71,7 @@ export const AgentChat = ({
         </div>
       </div>
 
-      <div style={styles.agentMessages}>
+      <div style={styles.agentMessages} ref={messagesContainerRef}>
         {messages.length === 0 && (
           <div style={styles.emptyState}>
             <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>💬</div>

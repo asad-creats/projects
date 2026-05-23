@@ -3,7 +3,7 @@ import { theme } from './theme';
 export const styles = {
   container: {
     minHeight: '100vh',
-    background: theme.bg,
+    background: `radial-gradient(1200px 600px at 80% -10%, rgba(139,92,246,0.10), transparent 60%), radial-gradient(900px 500px at 0% 0%, rgba(99,102,241,0.08), transparent 55%), ${theme.bg}`,
     padding: '2rem',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
@@ -423,7 +423,8 @@ export const styles = {
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    height: 'calc(100vh - 10rem)',
+    height: 'calc(100vh - 12rem)',
+    minHeight: '480px',
     boxShadow: '0 4px 24px rgba(139, 92, 246, 0.1)',
   },
 

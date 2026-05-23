@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { styles } from './styles/styles';
 import { theme } from './styles/theme';
@@ -20,6 +20,16 @@ function Todo() {
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskDate, setNewTaskDate] = useState(getTodayString());
   const [newTaskCategory, setNewTaskCategory] = useState('General');
+
+  // Responsive: stack panels into one column on narrow screens
+  const [isNarrow, setIsNarrow] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < 900 : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 900);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   
   // Custom hooks
   const { 
@@ -158,7 +168,7 @@ function Todo() {
         </div>
       )}
 
-      <div style={styles.mainGrid}>
+      <div style={{ ...styles.mainGrid, gridTemplateColumns: isNarrow ? '1fr' : '1fr 1fr' }}>
         {/* Left Panel - Tasks */}
         <div style={styles.leftPanel}>
           <TaskStats stats={stats} loading={loading} />
@@ -210,6 +220,7 @@ function Todo() {
           quickActions={quickActions}
           selectedProvider={selectedProvider}
           setSelectedProvider={setSelectedProvider}
+          isNarrow={isNarrow}
         />
       </div>
     </div>
