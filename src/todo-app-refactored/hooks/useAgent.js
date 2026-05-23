@@ -31,7 +31,7 @@ export const useAgent = (todos, setTodos, addTodo, toggleTodo, deleteTodo, selec
     const config = {
       apiKey: process.env.REACT_APP_GEMINI_API_KEY,
       provider: effectiveProvider,
-      model: effectiveProvider === 'ollama' ? selectedModel : 'gemini-1.5-pro'
+      model: effectiveProvider === 'ollama' ? selectedModel : 'gemini-2.5-flash'
     };
 
     const cb = callbacksRef.current;

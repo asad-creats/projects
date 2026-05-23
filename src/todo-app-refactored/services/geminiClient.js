@@ -8,7 +8,7 @@ export class GeminiClient {
     this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
   }
 
-  async chat(messages, model = 'gemini-1.5-pro') {
+  async chat(messages, model = 'gemini-2.5-flash') {
     try {
       if (!this.apiKey) {
         throw new Error('Gemini API key is not configured');

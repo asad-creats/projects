@@ -18,7 +18,7 @@ export class TaskAgent {
     // provider: 'ollama' (local, free, needs Ollama installed)
     //          'gemini' (cloud, free, needs API key)
     this.provider = config.provider || 'ollama';
-    this.model = config.model || (this.provider === 'ollama' ? 'llama3.2' : 'gemini-1.5-pro');
+    this.model = config.model || (this.provider === 'ollama' ? 'llama3.2' : 'gemini-2.5-flash');
     
     // Initialize the right AI client
     if (this.provider === 'ollama') {

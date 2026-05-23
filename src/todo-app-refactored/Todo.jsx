@@ -138,7 +138,7 @@ function Todo() {
           <h1 style={styles.title}>✨ AI Task Manager</h1>
           <p style={styles.subtitle}>
             {activeProvider === 'ollama' && <>Powered by Ollama 🟢 — {selectedModel}</>}
-            {activeProvider === 'gemini' && <>Powered by Gemini 🟢 — gemini-1.5-pro</>}
+            {activeProvider === 'gemini' && <>Powered by Gemini 🟢 — gemini-2.5-flash</>}
             {!activeProvider && <>No AI provider connected 🔴</>}
           </p>
         </div>
