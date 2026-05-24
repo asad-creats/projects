@@ -3,7 +3,7 @@ import { theme } from './theme';
 export const styles = {
   container: {
     minHeight: '100vh',
-    background: `radial-gradient(1200px 600px at 80% -10%, rgba(139,92,246,0.10), transparent 60%), radial-gradient(900px 500px at 0% 0%, rgba(99,102,241,0.08), transparent 55%), ${theme.bg}`,
+    background: `radial-gradient(1200px 600px at 80% -10%, rgba(56,189,248,0.10), transparent 60%), radial-gradient(900px 500px at 0% 0%, rgba(96,165,250,0.08), transparent 55%), ${theme.bg}`,
     padding: '2rem',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
@@ -332,7 +332,7 @@ export const styles = {
   suggestionsPanelTitle: {
     fontSize: '0.875rem',
     fontWeight: '600',
-    color: '#8b5cf6',
+    color: theme.agentAccent,
   },
 
   closeSuggestionsBtn: {
@@ -425,7 +425,7 @@ export const styles = {
     flexDirection: 'column',
     height: 'calc(100vh - 12rem)',
     minHeight: '480px',
-    boxShadow: '0 4px 24px rgba(139, 92, 246, 0.1)',
+    boxShadow: '0 4px 24px rgba(96, 165, 250, 0.12)',
   },
 
   agentHeader: {
@@ -441,7 +441,7 @@ export const styles = {
   agentTitle: {
     fontSize: '1.25rem',
     fontWeight: '700',
-    color: '#8b5cf6',
+    color: theme.agentAccent,
     marginBottom: '0.25rem',
   },
 
@@ -478,12 +478,12 @@ export const styles = {
 
   agentBadge: {
     padding: '0.5rem 1rem',
-    background: 'rgba(139, 92, 246, 0.15)',
+    background: theme.agentBg,
     border: `1px solid ${theme.agentBorder}`,
     borderRadius: '20px',
     fontSize: '0.75rem',
     fontWeight: '600',
-    color: '#8b5cf6',
+    color: theme.agentAccent,
   },
 
   agentMessages: {
@@ -531,10 +531,10 @@ export const styles = {
   toolBadge: {
     fontSize: '0.7rem',
     padding: '3px 8px',
-    background: 'rgba(139, 92, 246, 0.2)',
+    background: theme.agentBg,
     border: `1px solid ${theme.agentBorder}`,
     borderRadius: '10px',
-    color: '#8b5cf6',
+    color: theme.agentAccent,
     fontWeight: '500',
   },
 
@@ -548,7 +548,7 @@ export const styles = {
   toolResults: {
     marginTop: '0.75rem',
     padding: '0.75rem',
-    background: 'rgba(139, 92, 246, 0.05)',
+    background: 'rgba(96, 165, 250, 0.06)',
     borderRadius: '8px',
     fontSize: '0.75rem',
   },
@@ -571,7 +571,7 @@ export const styles = {
     background: 'transparent',
     border: `1px solid ${theme.agentBorder}`,
     borderRadius: '20px',
-    color: '#8b5cf6',
+    color: theme.agentAccent,
     fontSize: '0.75rem',
     fontWeight: '500',
     cursor: 'pointer',
@@ -600,7 +600,7 @@ export const styles = {
 
   agentSendBtn: {
     padding: '0.875rem 1.5rem',
-    background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
+    background: theme.gradient,
     border: 'none',
     borderRadius: '10px',
     color: 'white',
