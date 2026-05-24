@@ -50,8 +50,16 @@ export class GeminiClient {
       );
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`Gemini API error: ${error.error?.message || response.statusText}`);
+        const error = await response.json().catch(() => ({}));
+        const msg = error.error?.message || response.statusText;
+        // 503 = overloaded, 429 = rate/quota. These are transient on the free tier.
+        if (response.status === 503 || /overloaded|high usage/i.test(msg)) {
+          throw new Error('Gemini is overloaded right now (free-tier traffic). Try again, or pick a lighter model like gemini-2.0-flash in AI Settings.');
+        }
+        if (response.status === 429) {
+          throw new Error('Gemini rate limit / quota reached for this key. Wait a bit, or switch model in AI Settings.');
+        }
+        throw new Error(`Gemini API error: ${msg}`);
       }
 
       const data = await response.json();

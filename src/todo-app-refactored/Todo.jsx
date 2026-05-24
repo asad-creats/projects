@@ -134,7 +134,7 @@ function TodoApp({ auth }) {
   ];
 
   // AI availability based on the selected mode/provider.
-  const providerLabels = { gemini: 'Gemini', openai: 'OpenAI', anthropic: 'Claude', ollama: 'Ollama' };
+  const providerLabels = { gemini: 'Gemini', openai: 'OpenAI', anthropic: 'Claude', openrouter: 'OpenRouter', ollama: 'Ollama' };
   const aiReady =
     aiConfig.mode === 'free'
       ? auth.isConfigured

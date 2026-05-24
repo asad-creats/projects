@@ -4,6 +4,7 @@ import { ProxyClient } from '../services/proxyClient';
 import { GeminiClient } from '../services/geminiClient';
 import { OpenAIClient } from '../services/openaiClient';
 import { AnthropicClient } from '../services/anthropicClient';
+import { OpenRouterClient } from '../services/openRouterClient';
 import { OllamaClient } from '../services/ollamaClient';
 import { DEFAULT_MODELS } from './useAiConfig';
 import { supabase } from '../../supabaseClient';
@@ -18,6 +19,8 @@ function buildClient(aiConfig, ollamaSelectedModel) {
       return { client: new OpenAIClient(aiConfig.apiKey), model: aiConfig.model || DEFAULT_MODELS.openai, provider: 'openai' };
     case 'anthropic':
       return { client: new AnthropicClient(aiConfig.apiKey), model: aiConfig.model || DEFAULT_MODELS.anthropic, provider: 'anthropic' };
+    case 'openrouter':
+      return { client: new OpenRouterClient(aiConfig.apiKey), model: aiConfig.model || DEFAULT_MODELS.openrouter, provider: 'openrouter' };
     case 'ollama':
       return { client: new OllamaClient(), model: aiConfig.model || ollamaSelectedModel || DEFAULT_MODELS.ollama, provider: 'ollama' };
     case 'gemini':
