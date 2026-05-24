@@ -47,30 +47,25 @@ export const useTodos = () => {
       return newTodo;
     }
 
-    try {
-      const { data, error } = await supabase
-        .from('todos')
-        .insert([{ text, date, category, completed: false }])
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from('todos')
+      .insert([{ text, date, category, completed: false }])
+      .select()
+      .single();
 
-      if (error) throw error;
-
-      setTodos(prevTodos => [...prevTodos, data]);
-      return data;
-    } catch (error) {
+    if (error) {
+      // The DB trigger raises 'TASK_LIMIT' once a user hits 100 tasks.
+      if ((error.message || '').includes('TASK_LIMIT')) {
+        const limitErr = new Error('TASK_LIMIT');
+        limitErr.code = 'TASK_LIMIT';
+        throw limitErr;
+      }
       console.error('Error adding todo:', error);
-      // Fallback to local state if database fails
-      const newTodo = {
-        id: Date.now(),
-        text,
-        date,
-        category,
-        completed: false
-      };
-      setTodos(prevTodos => [...prevTodos, newTodo]);
-      return newTodo;
+      throw error;
     }
+
+    setTodos(prevTodos => [...prevTodos, data]);
+    return data;
   };
 
   const toggleTodo = async (id, currentStatus) => {

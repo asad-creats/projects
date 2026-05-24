@@ -6,6 +6,8 @@ import { getTodayString } from './utils/dateUtils';
 import { useTodos } from './hooks/useTodos';
 import { useOllama } from './hooks/useOllama';
 import { useAgent } from './hooks/useAgent';
+import { useAuth } from './hooks/useAuth';
+import { Login } from './components/Login';
 import { TaskStats } from './components/TaskStats';
 import { AddTaskForm } from './components/AddTaskForm';
 import { FilterBar } from './components/FilterBar';
@@ -13,13 +15,34 @@ import { CategoryBar } from './components/CategoryBar';
 import { TaskList } from './components/TaskList';
 import { AgentChat } from './components/AgentChat';
 
+// Auth gate: show the login screen until the user is signed in, then mount the
+// app fresh (so useTodos fetches the now-authenticated user's tasks).
 function Todo() {
+  const auth = useAuth();
+
+  if (!auth.authReady) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.loader}>Loading…</div>
+      </div>
+    );
+  }
+
+  if (auth.isConfigured && !auth.user) {
+    return <Login auth={auth} />;
+  }
+
+  return <TodoApp auth={auth} />;
+}
+
+function TodoApp({ auth }) {
   // State management
   const [filter, setFilter] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskDate, setNewTaskDate] = useState(getTodayString());
   const [newTaskCategory, setNewTaskCategory] = useState('General');
+  const [taskLimitHit, setTaskLimitHit] = useState(false);
 
   // Responsive: stack panels into one column on narrow screens
   const [isNarrow, setIsNarrow] = useState(
@@ -72,17 +95,22 @@ function Todo() {
 
     try {
       const newTask = await addTodo(newTaskText, newTaskDate, newTaskCategory);
-      
+      setTaskLimitHit(false);
+
       // Show suggestions option for the newly created task if any AI is available
       if (newTask && (ollamaConnected || process.env.REACT_APP_GEMINI_API_KEY)) {
         setShowSuggestions(newTask.id);
       }
-      
+
       setNewTaskText('');
       setNewTaskDate(getTodayString());
       setNewTaskCategory('General');
     } catch (error) {
-      console.error('Error adding task:', error);
+      if (error.code === 'TASK_LIMIT') {
+        setTaskLimitHit(true);
+      } else {
+        console.error('Error adding task:', error);
+      }
     }
   };
 
@@ -152,10 +180,31 @@ function Todo() {
             {!activeProvider && <>No AI provider connected 🔴</>}
           </p>
         </div>
-        <Link to="/" style={styles.backButton}>
-          ← Back to Home
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {auth.user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.8rem', color: theme.textMuted, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {auth.user.email}
+              </span>
+              <button onClick={auth.signOut} style={styles.backButton}>
+                Sign out
+              </button>
+            </div>
+          )}
+          <Link to="/" style={styles.backButton}>
+            ← Home
+          </Link>
+        </div>
       </div>
+
+      {taskLimitHit && (
+        <div style={styles.warningBanner}>
+          <strong>⚠️ Task limit reached</strong>
+          <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
+            The free plan is limited to 100 tasks. Delete a few to add more.
+          </p>
+        </div>
+      )}
 
       {!aiAvailable && (
         <div style={styles.warningBanner}>
