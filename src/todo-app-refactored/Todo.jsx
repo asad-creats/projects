@@ -7,6 +7,7 @@ import { useTodos } from './hooks/useTodos';
 import { useOllama } from './hooks/useOllama';
 import { useAgent } from './hooks/useAgent';
 import { useAuth } from './hooks/useAuth';
+import { useAiConfig } from './hooks/useAiConfig';
 import { Login } from './components/Login';
 import { TaskStats } from './components/TaskStats';
 import { AddTaskForm } from './components/AddTaskForm';
@@ -14,6 +15,7 @@ import { FilterBar } from './components/FilterBar';
 import { CategoryBar } from './components/CategoryBar';
 import { TaskList } from './components/TaskList';
 import { AgentChat } from './components/AgentChat';
+import { AiSettings } from './components/AiSettings';
 
 // Auth gate: show the login screen until the user is signed in, then mount the
 // app fresh (so useTodos fetches the now-authenticated user's tasks).
@@ -43,6 +45,10 @@ function TodoApp({ auth }) {
   const [newTaskDate, setNewTaskDate] = useState(getTodayString());
   const [newTaskCategory, setNewTaskCategory] = useState('General');
   const [taskLimitHit, setTaskLimitHit] = useState(false);
+  const [showAiSettings, setShowAiSettings] = useState(false);
+
+  // AI provider/model config (persisted in localStorage)
+  const { config: aiConfig, update: updateAiConfig } = useAiConfig();
 
   // Responsive: stack panels into one column on narrow screens
   const [isNarrow, setIsNarrow] = useState(
@@ -66,13 +72,8 @@ function TodoApp({ auth }) {
     stats 
   } = useTodos();
   
-  const { 
-    ollamaModels, 
-    selectedModel, 
-    setSelectedModel, 
-    ollamaConnected 
-  } = useOllama();
-  
+  const { selectedModel, ollamaConnected } = useOllama();
+
   const {
     agentInput,
     setAgentInput,
@@ -84,9 +85,8 @@ function TodoApp({ auth }) {
     loadingSuggestions,
     taskSuggestions,
     handleGetSuggestions,
-    selectedProvider,
-    setSelectedProvider
-  } = useAgent(todos, setTodos, addTodo, toggleTodo, deleteTodo, selectedModel, ollamaConnected);
+    freeUsage,
+  } = useAgent(todos, setTodos, addTodo, toggleTodo, deleteTodo, aiConfig, selectedModel, ollamaConnected);
 
   // Handle manual task creation
   const handleManualAddTask = async (e) => {
@@ -97,8 +97,8 @@ function TodoApp({ auth }) {
       const newTask = await addTodo(newTaskText, newTaskDate, newTaskCategory);
       setTaskLimitHit(false);
 
-      // Show suggestions option for the newly created task if any AI is available
-      if (newTask && (ollamaConnected || process.env.REACT_APP_GEMINI_API_KEY)) {
+      // Show suggestions option for the newly created task if AI is available
+      if (newTask && aiReady) {
         setShowSuggestions(newTask.id);
       }
 
@@ -133,13 +133,19 @@ function TodoApp({ auth }) {
     'Add a task to review budget'
   ];
 
-  // AI availability — either provider works
-  const geminiReady = !!process.env.REACT_APP_GEMINI_API_KEY;
-  const aiAvailable = ollamaConnected || geminiReady;
-  const activeProvider =
-    selectedProvider === 'gemini' && geminiReady ? 'gemini' :
-    ollamaConnected ? 'ollama' :
-    geminiReady ? 'gemini' : null;
+  // AI availability based on the selected mode/provider.
+  const providerLabels = { gemini: 'Gemini', openai: 'OpenAI', anthropic: 'Claude', ollama: 'Ollama' };
+  const aiReady =
+    aiConfig.mode === 'free'
+      ? auth.isConfigured
+      : aiConfig.provider === 'ollama'
+        ? ollamaConnected
+        : !!aiConfig.apiKey;
+
+  const aiSubtitle =
+    aiConfig.mode === 'free'
+      ? `Free tier${freeUsage ? ` · ${Math.max(0, (freeUsage.limit ?? 4) - (freeUsage.used ?? 0))}/${freeUsage.limit ?? 4} left today` : ''} ${aiReady ? '🟢' : '🔴'}`
+      : `${providerLabels[aiConfig.provider]} · ${aiConfig.model || 'default model'} ${aiReady ? '🟢' : '🔴'}`;
 
   // Filter todos
   const filteredTodos = useMemo(() => {
@@ -174,11 +180,7 @@ function TodoApp({ auth }) {
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>✨ AI Task Manager</h1>
-          <p style={styles.subtitle}>
-            {activeProvider === 'ollama' && <>Powered by Ollama 🟢 — {selectedModel}</>}
-            {activeProvider === 'gemini' && <>Powered by Gemini 🟢 — gemini-2.5-flash</>}
-            {!activeProvider && <>No AI provider connected 🔴</>}
-          </p>
+          <p style={styles.subtitle}>{aiSubtitle}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           {auth.user && (
@@ -206,13 +208,21 @@ function TodoApp({ auth }) {
         </div>
       )}
 
-      {!aiAvailable && (
+      {!aiReady && (
         <div style={styles.warningBanner}>
-          <strong>⚠️ No AI provider available</strong>
+          <strong>⚠️ AI assistant not ready</strong>
           <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
-            Run Ollama locally on <code>localhost:11434</code> (install from{' '}
-            <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" style={{ color: theme.accent }}>ollama.ai</a>),
-            {' '}or set <code>REACT_APP_GEMINI_API_KEY</code> in your environment to use Gemini.
+            {aiConfig.mode === 'free'
+              ? 'The free tier needs Supabase configured. '
+              : aiConfig.provider === 'ollama'
+                ? 'Start Ollama on localhost:11434. '
+                : 'Add your API key in '}
+            <button
+              onClick={() => setShowAiSettings(true)}
+              style={{ background: 'none', border: 'none', color: theme.accent, cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
+            >
+              AI Settings
+            </button>.
           </p>
         </div>
       )}
@@ -250,7 +260,7 @@ function TodoApp({ auth }) {
             taskSuggestions={taskSuggestions}
             onCloseSuggestions={() => setShowSuggestions(null)}
             onRegenerateSuggestions={handleGetSuggestions}
-            ollamaConnected={aiAvailable}
+            ollamaConnected={aiReady}
             loading={loading}
           />
         </div>
@@ -262,16 +272,22 @@ function TodoApp({ auth }) {
           input={agentInput}
           setInput={setAgentInput}
           onSendMessage={handleAgentMessage}
+          aiConfig={aiConfig}
+          onOpenSettings={() => setShowAiSettings(true)}
+          freeUsage={freeUsage}
           ollamaConnected={ollamaConnected}
-          ollamaModels={ollamaModels}
-          selectedModel={selectedModel}
-          setSelectedModel={setSelectedModel}
           quickActions={quickActions}
-          selectedProvider={selectedProvider}
-          setSelectedProvider={setSelectedProvider}
           isNarrow={isNarrow}
         />
       </div>
+
+      {showAiSettings && (
+        <AiSettings
+          config={aiConfig}
+          update={updateAiConfig}
+          onClose={() => setShowAiSettings(false)}
+        />
+      )}
     </div>
   );
 }

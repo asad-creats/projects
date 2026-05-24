@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { styles } from '../styles/styles';
+import { DEFAULT_MODELS } from '../hooks/useAiConfig';
 
 export const AgentChat = ({
   messages,
@@ -7,67 +8,65 @@ export const AgentChat = ({
   input,
   setInput,
   onSendMessage,
+  aiConfig,
+  onOpenSettings,
+  freeUsage,
   ollamaConnected,
-  ollamaModels,
-  selectedModel,
-  setSelectedModel,
   quickActions,
-  selectedProvider,
-  setSelectedProvider,
-  isNarrow
+  isNarrow,
 }) => {
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
 
-  // Provider is ready if Ollama is selected and connected, OR Gemini is selected and has a key
-  const geminiReady = !!process.env.REACT_APP_GEMINI_API_KEY;
-  const providerReady = selectedProvider === 'ollama' ? ollamaConnected : geminiReady;
+  const FREE_LIMIT = freeUsage?.limit ?? 4;
+  const freeUsed = freeUsage?.used ?? 0;
+  const freeRemaining = Math.max(0, FREE_LIMIT - freeUsed);
+  const freeCapped = aiConfig.mode === 'free' && freeRemaining <= 0;
 
-  // Scroll only the chat container — NOT the whole page (scrollIntoView would
-  // hijack the window scroll and push the header off-screen on load).
+  // Readiness depends on the selected mode/provider.
+  const providerReady =
+    aiConfig.mode === 'free'
+      ? !freeCapped
+      : aiConfig.provider === 'ollama'
+        ? ollamaConnected
+        : !!aiConfig.apiKey;
+
+  // Status badge text.
+  const statusBadge = (() => {
+    if (aiConfig.mode === 'free') {
+      return freeCapped ? '⚠️ Daily limit reached' : `Free · ${freeRemaining}/${FREE_LIMIT} left`;
+    }
+    if (aiConfig.provider === 'ollama') {
+      return ollamaConnected ? '🏠 Ollama connected' : '🏠 Ollama not running';
+    }
+    const model = aiConfig.model || DEFAULT_MODELS[aiConfig.provider];
+    return aiConfig.apiKey ? `🔑 ${model}` : '⚠️ Add your API key';
+  })();
+
+  // Scroll only the chat container — not the whole page.
   useEffect(() => {
     const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
+    if (container) container.scrollTop = container.scrollHeight;
   }, [messages, aiLoading]);
+
+  const placeholder = providerReady
+    ? 'Ask me anything…'
+    : aiConfig.mode === 'free'
+      ? 'Daily free limit reached — add your own key in settings'
+      : aiConfig.provider === 'ollama'
+        ? 'Start Ollama on localhost:11434…'
+        : 'Add your API key in AI Settings…';
 
   return (
     <div style={{ ...styles.agentContainer, height: isNarrow ? '70vh' : styles.agentContainer.height }}>
       <div style={styles.agentHeader}>
         <div>
           <div style={styles.agentTitle}>🤖 AI Assistant</div>
-          <div style={styles.agentSubtitle}>
-            Ask me anything about your tasks
-          </div>
+          <div style={styles.agentSubtitle}>Ask me anything about your tasks</div>
         </div>
-        <div style={styles.providerSelector}>
-          <select
-            value={selectedProvider}
-            onChange={(e) => setSelectedProvider(e.target.value)}
-            style={styles.providerSelect}
-          >
-            <option value="ollama">🏠 Ollama (Local)</option>
-            <option value="gemini">🌟 Gemini (Cloud)</option>
-          </select>
-        </div>
-        {selectedProvider === 'ollama' && ollamaConnected && ollamaModels.length > 1 && (
-          <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            style={styles.modelSelect}
-          >
-            {ollamaModels.map(model => (
-              <option key={model.name} value={model.name}>
-                {model.name}
-              </option>
-            ))}
-          </select>
-        )}
-        <div style={styles.agentBadge}>
-          {selectedProvider === 'ollama'
-            ? (ollamaConnected ? '🏠 Ollama Connected' : '🏠 Ollama Disconnected')
-            : (process.env.REACT_APP_GEMINI_API_KEY ? '🌟 Gemini Ready' : '⚠️ Gemini Key Missing')}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={styles.agentBadge}>{statusBadge}</div>
+          <button style={styles.settingsBtn} onClick={onOpenSettings} title="AI settings">⚙️</button>
         </div>
       </div>
 
@@ -83,23 +82,18 @@ export const AgentChat = ({
             </div>
           </div>
         )}
-        
+
         {messages.map((msg, idx) => (
           <div
             key={idx}
-            style={{
-              ...styles.message,
-              ...(msg.role === 'user' ? styles.userMessage : styles.agentMessage)
-            }}
+            style={{ ...styles.message, ...(msg.role === 'user' ? styles.userMessage : styles.agentMessage) }}
           >
             <div style={styles.messageHeader}>
               <div style={styles.messageRole}>
                 {msg.role === 'user' ? '👤 You' : '🤖 Assistant'}
               </div>
               {msg.action && msg.action !== 'none' && (
-                <div style={styles.toolBadge}>
-                  🛠️ {msg.action}
-                </div>
+                <div style={styles.toolBadge}>🛠️ {msg.action}</div>
               )}
             </div>
             <div style={styles.messageContent}>{msg.content}</div>
@@ -114,18 +108,18 @@ export const AgentChat = ({
             )}
           </div>
         ))}
-        
+
         {aiLoading && (
           <div style={styles.message}>
             <div style={styles.aiLoaderContainer}>
               <div style={styles.aiLoaderText}>Thinking</div>
-              <div style={{...styles.aiLoaderDot, animationDelay: '0s'}} />
-              <div style={{...styles.aiLoaderDot, animationDelay: '0.2s'}} />
-              <div style={{...styles.aiLoaderDot, animationDelay: '0.4s'}} />
+              <div style={{ ...styles.aiLoaderDot, animationDelay: '0s' }} />
+              <div style={{ ...styles.aiLoaderDot, animationDelay: '0.2s' }} />
+              <div style={{ ...styles.aiLoaderDot, animationDelay: '0.4s' }} />
             </div>
           </div>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -150,13 +144,7 @@ export const AgentChat = ({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && providerReady && !aiLoading && onSendMessage(input)}
-          placeholder={
-            providerReady
-              ? "Ask me anything..."
-              : selectedProvider === 'ollama'
-                ? "Waiting for Ollama connection..."
-                : "Add REACT_APP_GEMINI_API_KEY to use Gemini"
-          }
+          placeholder={placeholder}
           style={styles.agentInputField}
           disabled={!providerReady || aiLoading}
         />

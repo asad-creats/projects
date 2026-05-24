@@ -14,19 +14,17 @@ export class TaskAgent {
     this.toggleTodo = toggleTodo;
     this.deleteTodo = deleteTodo;
     
-    // Choose which AI to use
-    // provider: 'ollama' (local, free, needs Ollama installed)
-    //          'gemini' (cloud, free, needs API key)
     this.provider = config.provider || 'ollama';
     this.model = config.model || (this.provider === 'ollama' ? 'llama3.2' : 'gemini-2.5-flash');
-    
-    // Initialize the right AI client
-    if (this.provider === 'ollama') {
+
+    // Prefer a pre-built client (useAgent decides free/proxy vs bring-your-own).
+    // Fall back to the legacy provider switch for backwards compatibility.
+    if (config.aiClient) {
+      this.aiClient = config.aiClient;
+    } else if (this.provider === 'ollama') {
       this.aiClient = new OllamaClient();
-      console.log('🏠 Using Ollama (Local AI)');
     } else {
       this.aiClient = new GeminiClient(config.apiKey);
-      console.log('🌟 Using Gemini (Free Cloud AI)');
     }
 
     // Define available tools the agent can use

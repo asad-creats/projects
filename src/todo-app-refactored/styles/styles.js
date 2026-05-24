@@ -484,6 +484,18 @@ export const styles = {
     fontSize: '0.75rem',
     fontWeight: '600',
     color: theme.agentAccent,
+    whiteSpace: 'nowrap',
+  },
+
+  settingsBtn: {
+    background: theme.bg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '10px',
+    color: theme.text,
+    fontSize: '1rem',
+    cursor: 'pointer',
+    padding: '0.4rem 0.6rem',
+    lineHeight: 1,
   },
 
   agentMessages: {
