@@ -377,6 +377,46 @@ Keep it concise and practical. Format as a short paragraph followed by bullet po
     }
   }
 
+  // Scan text for COMPLETE, balanced {...} objects and return those that look
+  // like tool calls (have an `action`). Tolerates truncated/multi-object output
+  // and braces/quotes inside string values. Used to salvage cut-off responses.
+  _extractActions(text) {
+    const objects = [];
+    let depth = 0;
+    let start = -1;
+    let inStr = false;
+    let esc = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === '\\') esc = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') { inStr = true; continue; }
+      if (ch === '{') {
+        if (depth === 0) start = i;
+        depth++;
+      } else if (ch === '}') {
+        if (depth > 0) {
+          depth--;
+          if (depth === 0 && start !== -1) {
+            try {
+              const obj = JSON.parse(text.slice(start, i + 1));
+              if (obj && obj.action) objects.push(obj);
+            } catch (_) {
+              /* skip malformed fragment */
+            }
+            start = -1;
+          }
+        }
+      }
+    }
+    return objects;
+  }
+
   // Process user query with AI - works with both Ollama and Gemini!
   async processQuery(userMessage, conversationHistory = []) {
     try {
@@ -435,23 +475,45 @@ ONLY respond in plain English if the user is making casual conversation (like "h
 
       const response = await this.aiClient.chat(messages, this.model);
 
-      // Try to extract JSON from response
+      // Try to extract JSON tool call(s) from the response
       let parsed = null;
+      let wasTruncated = false;
+      const cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       try {
-        // Remove any markdown code blocks
-        let cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        
-        // Try to find JSON object or array
         const jsonMatch = cleanResponse.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
         if (jsonMatch) {
           parsed = JSON.parse(jsonMatch[1]);
         }
       } catch (e) {
-        console.log('Could not parse JSON, treating as conversational response');
+        // fall through to salvage
       }
 
-      // If no JSON found, treat as conversational
+      // If the direct parse failed (often because the model's JSON got cut off
+      // at the token limit), salvage every COMPLETE action object we can find.
       if (!parsed) {
+        const salvaged = this._extractActions(cleanResponse);
+        if (salvaged.length > 0) {
+          parsed = salvaged;
+          const mentioned = (cleanResponse.match(/"action"\s*:/g) || []).length;
+          wasTruncated = mentioned > salvaged.length;
+        }
+      }
+
+      // Still nothing usable. If the model CLEARLY tried to emit a tool call but
+      // produced malformed/cut-off JSON, never dump raw JSON at the user.
+      if (!parsed) {
+        const looksLikeToolCall = /"action"\s*:/.test(cleanResponse) || /^[[{]/.test(cleanResponse);
+        if (looksLikeToolCall) {
+          return {
+            response: "I started to do that but my response got cut off or malformed. Try asking for fewer items at once (e.g. \"add 5 steps\"), or rephrase it.",
+            action: 'none',
+            actions: [],
+            toolResult: null,
+            fullResponse: response,
+            provider: providerInfo
+          };
+        }
+        // Genuine conversational reply.
         return {
           response: response,
           action: 'none',
@@ -502,6 +564,10 @@ ONLY respond in plain English if the user is making casual conversation (like "h
 
         if (details) {
           summaryResponse += '\n\n' + details;
+        }
+
+        if (wasTruncated) {
+          summaryResponse += '\n\n⚠️ Some steps may have been cut off. Ask me to "continue" to add the rest.';
         }
 
         return {

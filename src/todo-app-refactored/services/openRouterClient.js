@@ -26,7 +26,7 @@ export class OpenRouterClient {
         model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         temperature: 0.7,
-        max_tokens: 1024,
+        max_tokens: 2048,
       }),
     });
 
