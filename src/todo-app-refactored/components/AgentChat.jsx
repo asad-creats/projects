@@ -14,6 +14,8 @@ export const AgentChat = ({
   ollamaConnected,
   quickActions,
   isNarrow,
+  rootRef,
+  settingsBtnRef,
 }) => {
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -58,7 +60,7 @@ export const AgentChat = ({
         : 'Add your API key in AI Settings…';
 
   return (
-    <div style={{ ...styles.agentContainer, height: isNarrow ? '70vh' : styles.agentContainer.height }}>
+    <div ref={rootRef} style={{ ...styles.agentContainer, height: isNarrow ? '70vh' : styles.agentContainer.height }}>
       <div style={styles.agentHeader}>
         <div>
           <div style={styles.agentTitle}>🤖 AI Assistant</div>
@@ -66,7 +68,7 @@ export const AgentChat = ({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div style={styles.agentBadge}>{statusBadge}</div>
-          <button style={styles.settingsBtn} onClick={onOpenSettings} title="AI settings">⚙️</button>
+          <button ref={settingsBtnRef} style={styles.settingsBtn} onClick={onOpenSettings} title="AI settings">⚙️</button>
         </div>
       </div>
 

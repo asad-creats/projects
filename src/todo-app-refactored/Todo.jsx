@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { styles } from './styles/styles';
 import { theme } from './styles/theme';
@@ -16,6 +16,9 @@ import { CategoryBar } from './components/CategoryBar';
 import { TaskList } from './components/TaskList';
 import { AgentChat } from './components/AgentChat';
 import { AiSettings } from './components/AiSettings';
+import { OnboardingTour } from './components/OnboardingTour';
+
+const TOUR_KEY = 'ai_task_tour_v1';
 
 // Auth gate: show the login screen until the user is signed in, then mount the
 // app fresh (so useTodos fetches the now-authenticated user's tasks).
@@ -46,6 +49,12 @@ function TodoApp({ auth }) {
   const [newTaskCategory, setNewTaskCategory] = useState('General');
   const [taskLimitHit, setTaskLimitHit] = useState(false);
   const [showAiSettings, setShowAiSettings] = useState(false);
+  const [showTour, setShowTour] = useState(false);
+
+  // Tour anchors
+  const addTaskRef = useRef(null);
+  const agentRef = useRef(null);
+  const settingsBtnRef = useRef(null);
 
   // AI provider/model config (persisted in localStorage)
   const { config: aiConfig, update: updateAiConfig } = useAiConfig();
@@ -87,6 +96,43 @@ function TodoApp({ auth }) {
     handleGetSuggestions,
     freeUsage,
   } = useAgent(todos, setTodos, addTodo, toggleTodo, deleteTodo, aiConfig, selectedModel, ollamaConnected);
+
+  // First-visit guided tour: show once per browser, after the app has loaded.
+  useEffect(() => {
+    if (loading) return;
+    try {
+      if (!localStorage.getItem(TOUR_KEY)) setShowTour(true);
+    } catch {
+      /* localStorage unavailable — skip the tour silently */
+    }
+  }, [loading]);
+
+  const finishTour = () => {
+    setShowTour(false);
+    try {
+      localStorage.setItem(TOUR_KEY, 'done');
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const tourSteps = [
+    {
+      ref: addTaskRef,
+      title: '📝 Add your tasks',
+      body: 'Type a task, pick a date and category, and hit add. Everything here is private to your account.',
+    },
+    {
+      ref: agentRef,
+      title: '🤖 Your AI assistant',
+      body: 'Ask in plain English — “add a task to call the bank tomorrow”, “what’s overdue?”, “suggest priorities”. It can create and organize tasks for you.',
+    },
+    {
+      ref: settingsBtnRef,
+      title: '🔑 Free tier & your own key',
+      body: 'You get 4 free AI messages a day. Need more, or a different model? Open AI Settings (⚙️) to plug in your own API key — that’s unlimited and stays in your browser.',
+    },
+  ];
 
   // Handle manual task creation
   const handleManualAddTask = async (e) => {
@@ -193,6 +239,9 @@ function TodoApp({ auth }) {
               </button>
             </div>
           )}
+          <button onClick={() => setShowTour(true)} style={styles.backButton} title="Replay the tour">
+            ? Tour
+          </button>
           <Link to="/" style={styles.backButton}>
             ← Home
           </Link>
@@ -232,15 +281,17 @@ function TodoApp({ auth }) {
         <div style={styles.leftPanel}>
           <TaskStats stats={stats} loading={loading} />
           
-          <AddTaskForm
-            newTaskText={newTaskText}
-            setNewTaskText={setNewTaskText}
-            newTaskDate={newTaskDate}
-            setNewTaskDate={setNewTaskDate}
-            newTaskCategory={newTaskCategory}
-            setNewTaskCategory={setNewTaskCategory}
-            onSubmit={handleManualAddTask}
-          />
+          <div ref={addTaskRef}>
+            <AddTaskForm
+              newTaskText={newTaskText}
+              setNewTaskText={setNewTaskText}
+              newTaskDate={newTaskDate}
+              setNewTaskDate={setNewTaskDate}
+              newTaskCategory={newTaskCategory}
+              setNewTaskCategory={setNewTaskCategory}
+              onSubmit={handleManualAddTask}
+            />
+          </div>
 
           <FilterBar filter={filter} setFilter={setFilter} />
           
@@ -278,6 +329,8 @@ function TodoApp({ auth }) {
           ollamaConnected={ollamaConnected}
           quickActions={quickActions}
           isNarrow={isNarrow}
+          rootRef={agentRef}
+          settingsBtnRef={settingsBtnRef}
         />
       </div>
 
@@ -288,6 +341,8 @@ function TodoApp({ auth }) {
           onClose={() => setShowAiSettings(false)}
         />
       )}
+
+      {showTour && <OnboardingTour steps={tourSteps} onDone={finishTour} />}
     </div>
   );
 }
