@@ -232,7 +232,7 @@ function TodoApp({ auth }) {
           {auth.user && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.8rem', color: theme.textMuted, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {auth.user.email}
+                {auth.displayName}
               </span>
               <button onClick={auth.signOut} style={styles.backButton}>
                 Sign out

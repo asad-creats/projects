@@ -2,16 +2,40 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { theme } from '../styles/theme';
 
+const SECURITY_QUESTIONS = [
+  'What was the name of your first pet?',
+  'What city were you born in?',
+  'What was your childhood nickname?',
+  'What is your favorite movie?',
+  'What was the make of your first car?',
+];
+
 export const Login = ({ auth }) => {
-  const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
-  const [email, setEmail] = useState('');
+  const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'forgot'
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
+  const [securityAnswer, setSecurityAnswer] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Forgot-password sub-state
+  const [forgotStep, setForgotStep] = useState('username'); // 'username' | 'answer'
+  const [foundQuestion, setFoundQuestion] = useState('');
+  const [resetAnswer, setResetAnswer] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+
+  const clearMsgs = () => { setError(''); setInfo(''); };
+  const switchMode = (m) => {
+    clearMsgs();
+    setMode(m);
+    setForgotStep('username');
+    setFoundQuestion('');
+  };
+
   const handleGoogle = async () => {
-    setError('');
+    clearMsgs();
     try {
       await auth.signInWithGoogle();
     } catch (e) {
@@ -21,27 +45,77 @@ export const Login = ({ auth }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setInfo('');
-    if (!email.trim() || !password) {
-      setError('Enter your email and password.');
+    clearMsgs();
+    if (!username.trim() || !password) {
+      setError('Enter your username and password.');
       return;
     }
     setLoading(true);
     try {
       if (mode === 'signin') {
-        const { error: err } = await auth.signInWithPassword(email, password);
+        const { error: err } = await auth.signInWithUsername(username, password);
         if (err) throw err;
       } else {
-        const { data, error: err } = await auth.signUpWithPassword(email, password);
-        if (err) throw err;
-        if (!data.session) {
-          setInfo('Account created. Check your email to confirm, then sign in.');
-          setMode('signin');
+        if (!securityAnswer.trim()) {
+          setError('Set a security answer so you can recover your account.');
+          setLoading(false);
+          return;
         }
+        const { error: err } = await auth.signUpWithUsername(
+          username, password, securityQuestion, securityAnswer
+        );
+        if (err) throw err;
+        // Success = signed in immediately (confirmation disabled).
       }
     } catch (e2) {
       setError(e2.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotLookup = async (e) => {
+    e.preventDefault();
+    clearMsgs();
+    if (!username.trim()) { setError('Enter your username.'); return; }
+    setLoading(true);
+    try {
+      const q = await auth.getSecurityQuestion(username);
+      if (!q) {
+        setError("No security question found for that username.");
+      } else {
+        setFoundQuestion(q);
+        setForgotStep('answer');
+      }
+    } catch (e2) {
+      setError(e2.message || 'Lookup failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetSubmit = async (e) => {
+    e.preventDefault();
+    clearMsgs();
+    if (!resetAnswer.trim() || !newPassword) {
+      setError('Enter your answer and a new password.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError('New password must be at least 6 characters.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await auth.resetPasswordWithAnswer(username, resetAnswer, newPassword);
+      setInfo('Password reset! Sign in with your new password.');
+      setMode('signin');
+      setForgotStep('username');
+      setPassword('');
+      setResetAnswer('');
+      setNewPassword('');
+    } catch (e2) {
+      setError(e2.message || 'Reset failed');
     } finally {
       setLoading(false);
     }
@@ -51,7 +125,9 @@ export const Login = ({ auth }) => {
     <div style={s.wrap}>
       <div style={s.card}>
         <h1 style={s.title}>✨ AI Task Manager</h1>
-        <p style={s.subtitle}>Sign in to manage your tasks with AI</p>
+        <p style={s.subtitle}>
+          {mode === 'forgot' ? 'Reset your password' : 'Sign in to manage your tasks with AI'}
+        </p>
 
         {!auth.isConfigured && (
           <div style={s.warn}>
@@ -60,53 +136,129 @@ export const Login = ({ auth }) => {
           </div>
         )}
 
-        <button style={s.googleBtn} onClick={handleGoogle} disabled={!auth.isConfigured}>
-          <span style={{ fontSize: '1.1rem' }}>🇬</span> Continue with Google
-        </button>
+        {/* ---------- Forgot password ---------- */}
+        {mode === 'forgot' ? (
+          forgotStep === 'username' ? (
+            <form onSubmit={handleForgotLookup} style={s.form}>
+              <input
+                type="text"
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                style={s.input}
+                autoComplete="username"
+                disabled={!auth.isConfigured}
+              />
+              {error && <div style={s.error}>{error}</div>}
+              <button type="submit" style={s.submitBtn} disabled={loading || !auth.isConfigured}>
+                {loading ? 'Please wait…' : 'Continue'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleResetSubmit} style={s.form}>
+              <div style={s.qLabel}>{foundQuestion}</div>
+              <input
+                type="text"
+                placeholder="Your answer"
+                value={resetAnswer}
+                onChange={(e) => setResetAnswer(e.target.value)}
+                style={s.input}
+              />
+              <input
+                type="password"
+                placeholder="New password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                style={s.input}
+                autoComplete="new-password"
+              />
+              {error && <div style={s.error}>{error}</div>}
+              <button type="submit" style={s.submitBtn} disabled={loading}>
+                {loading ? 'Please wait…' : 'Reset password'}
+              </button>
+            </form>
+          )
+        ) : (
+          /* ---------- Sign in / Sign up ---------- */
+          <>
+            <button style={s.googleBtn} onClick={handleGoogle} disabled={!auth.isConfigured}>
+              <span style={{ fontSize: '1.1rem' }}>🇬</span> Continue with Google
+            </button>
 
-        <div style={s.divider}><span style={s.dividerText}>or</span></div>
+            <div style={s.divider}><span style={s.dividerText}>or</span></div>
 
-        <form onSubmit={handleSubmit} style={s.form}>
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={s.input}
-            autoComplete="email"
-            disabled={!auth.isConfigured}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={s.input}
-            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            disabled={!auth.isConfigured}
-          />
+            <form onSubmit={handleSubmit} style={s.form}>
+              <input
+                type="text"
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                style={s.input}
+                autoComplete="username"
+                disabled={!auth.isConfigured}
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={s.input}
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                disabled={!auth.isConfigured}
+              />
 
-          {error && <div style={s.error}>{error}</div>}
-          {info && <div style={s.info}>{info}</div>}
+              {mode === 'signup' && (
+                <>
+                  <select
+                    value={securityQuestion}
+                    onChange={(e) => setSecurityQuestion(e.target.value)}
+                    style={s.input}
+                    disabled={!auth.isConfigured}
+                  >
+                    {SECURITY_QUESTIONS.map((q) => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Security answer (for password recovery)"
+                    value={securityAnswer}
+                    onChange={(e) => setSecurityAnswer(e.target.value)}
+                    style={s.input}
+                    disabled={!auth.isConfigured}
+                  />
+                </>
+              )}
 
-          <button type="submit" style={s.submitBtn} disabled={loading || !auth.isConfigured}>
-            {loading ? 'Please wait…' : mode === 'signin' ? 'Sign In' : 'Create Account'}
-          </button>
-        </form>
+              {error && <div style={s.error}>{error}</div>}
+              {info && <div style={s.info}>{info}</div>}
+
+              <button type="submit" style={s.submitBtn} disabled={loading || !auth.isConfigured}>
+                {loading ? 'Please wait…' : mode === 'signin' ? 'Sign In' : 'Create Account'}
+              </button>
+            </form>
+
+            {mode === 'signin' && (
+              <div style={{ ...s.switchRow, marginTop: '0.85rem' }}>
+                <button style={s.linkBtn} onClick={() => switchMode('forgot')}>
+                  Forgot password?
+                </button>
+              </div>
+            )}
+          </>
+        )}
 
         <div style={s.switchRow}>
-          {mode === 'signin' ? (
+          {mode === 'signin' && (
             <>No account?{' '}
-              <button style={s.linkBtn} onClick={() => { setMode('signup'); setError(''); }}>
-                Create one
-              </button>
+              <button style={s.linkBtn} onClick={() => switchMode('signup')}>Create one</button>
             </>
-          ) : (
+          )}
+          {mode === 'signup' && (
             <>Already have an account?{' '}
-              <button style={s.linkBtn} onClick={() => { setMode('signin'); setError(''); }}>
-                Sign in
-              </button>
+              <button style={s.linkBtn} onClick={() => switchMode('signin')}>Sign in</button>
             </>
+          )}
+          {mode === 'forgot' && (
+            <button style={s.linkBtn} onClick={() => switchMode('signin')}>← Back to sign in</button>
           )}
         </div>
 
@@ -191,6 +343,12 @@ const s = {
     position: 'relative',
   },
   form: { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
+  qLabel: {
+    color: theme.text,
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    padding: '0.25rem 0',
+  },
   input: {
     padding: '0.75rem 1rem',
     background: theme.bg,
