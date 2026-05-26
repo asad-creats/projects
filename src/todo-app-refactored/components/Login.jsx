@@ -391,9 +391,6 @@ export const Login = ({ auth }) => {
                 <button type="submit" style={s.submitBtn} disabled={loading || !auth.isConfigured}>
                   {loading ? 'Please wait…' : mode === 'signin' ? 'Sign In' : 'Create Account'}
                 </button>
-                {mode === 'signup' && (
-                  <div style={s.hint}>We'll email you a verification link to confirm your account.</div>
-                )}
               </form>
             )}
 
