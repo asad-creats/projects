@@ -22,12 +22,10 @@ export const Login = ({ auth }) => {
   const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
   const [securityAnswer, setSecurityAnswer] = useState('');
 
-  // Email (passwordless OTP)
+  // Email/password
   const [email, setEmail] = useState('');
-  const [emailStep, setEmailStep] = useState('enter'); // 'enter' | 'code'
-  const [code, setCode] = useState('');
 
-  // Forgot-password (username recovery)
+  // Username forgot-password (security question)
   const [forgotStep, setForgotStep] = useState('username'); // 'username' | 'answer'
   const [foundQuestion, setFoundQuestion] = useState('');
   const [resetAnswer, setResetAnswer] = useState('');
@@ -49,8 +47,8 @@ export const Login = ({ auth }) => {
   const switchMethod = (m) => {
     clearMsgs();
     setMethod(m);
-    setEmailStep('enter');
-    setCode('');
+    setMode('signin');
+    setForgotStep('username');
   };
 
   const handleGoogle = async () => {
@@ -63,7 +61,7 @@ export const Login = ({ auth }) => {
   };
 
   // ----- Username sign in / sign up -----
-  const handleSubmit = async (e) => {
+  const handleUsernameSubmit = async (e) => {
     e.preventDefault();
     clearMsgs();
     if (!username.trim() || !password) {
@@ -93,56 +91,58 @@ export const Login = ({ auth }) => {
     }
   };
 
-  // ----- Email OTP -----
-  const handleSendCode = async (e) => {
+  // ----- Email sign in / sign up -----
+  const handleEmailSubmit = async (e) => {
+    e.preventDefault();
+    clearMsgs();
+    if (!emailOk(email)) { setError('Enter a valid email address.'); return; }
+    if (!password) { setError('Enter your password.'); return; }
+    if (mode === 'signup' && password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    setLoading(true);
+    try {
+      if (mode === 'signin') {
+        const { error: err } = await auth.signInWithPassword(email.trim(), password);
+        if (err) throw err;
+        // Success → onAuthStateChange mounts the app.
+      } else {
+        const { data, error: err } = await auth.signUpWithPassword(email.trim(), password);
+        if (err) throw err;
+        if (!data?.session) {
+          // "Confirm email" is ON → a verification email was sent.
+          setInfo('Account created! Check your email for a verification link, then come back and sign in.');
+          setMode('signin');
+          setPassword('');
+        }
+        // If a session came back, confirmation is off and the app mounts.
+      }
+    } catch (e2) {
+      setError(e2.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ----- Email forgot password (reset link) -----
+  const handleEmailReset = async (e) => {
     e.preventDefault();
     clearMsgs();
     if (!emailOk(email)) { setError('Enter a valid email address.'); return; }
     setLoading(true);
     try {
-      const { error: err } = await auth.sendEmailOtp(email);
+      const { error: err } = await auth.resetPasswordForEmail(email);
       if (err) throw err;
-      setInfo(`We emailed a 6-digit code and a sign-in link to ${email.trim()}. Enter the code below — or just click the link in the email.`);
-      setEmailStep('code');
+      setInfo('If that email has an account, a password reset link is on its way. Check your inbox.');
     } catch (e2) {
-      setError(e2.message || 'Could not send the email.');
+      setError(e2.message || 'Could not send the reset email.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyCode = async (e) => {
-    e.preventDefault();
-    clearMsgs();
-    const c = code.replace(/\D/g, '');
-    if (c.length < 6) { setError('Enter the 6-digit code from your email.'); return; }
-    setLoading(true);
-    try {
-      const { error: err } = await auth.verifyEmailOtp(email, c);
-      if (err) throw err;
-      // Success → onAuthStateChange mounts the app.
-    } catch (e2) {
-      setError(e2.message || 'That code is invalid or expired. Try resending.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResend = async () => {
-    clearMsgs();
-    setLoading(true);
-    try {
-      const { error: err } = await auth.sendEmailOtp(email);
-      if (err) throw err;
-      setInfo('New code sent — check your inbox.');
-    } catch (e2) {
-      setError(e2.message || 'Could not resend the code.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ----- Forgot password (username) -----
+  // ----- Username forgot password (security question) -----
   const handleForgotLookup = async (e) => {
     e.preventDefault();
     clearMsgs();
@@ -193,13 +193,13 @@ export const Login = ({ auth }) => {
   const isForgot = mode === 'forgot';
   const heading = isForgot
     ? 'Reset your password'
-    : method === 'email'
-      ? 'Continue with email'
-      : mode === 'signin'
-        ? 'Welcome back'
-        : 'Create your account';
+    : mode === 'signup'
+      ? 'Create your account'
+      : 'Welcome back';
   const subheading = isForgot
-    ? 'Answer your security question to set a new password.'
+    ? (method === 'username'
+        ? 'Answer your security question to set a new password.'
+        : 'We\'ll email you a link to reset your password.')
     : 'Manage your tasks with a built-in AI assistant.';
 
   return (
@@ -222,9 +222,26 @@ export const Login = ({ auth }) => {
           </div>
         )}
 
-        {/* ---------- Forgot password (username) ---------- */}
+        {/* ---------- Forgot password ---------- */}
         {isForgot ? (
-          forgotStep === 'username' ? (
+          method === 'email' ? (
+            <form onSubmit={handleEmailReset} style={s.form}>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={s.input}
+                autoComplete="email"
+                disabled={!auth.isConfigured}
+              />
+              {error && <div style={s.error}>{error}</div>}
+              {info && <div style={s.info}>{info}</div>}
+              <button type="submit" style={s.submitBtn} disabled={loading || !auth.isConfigured}>
+                {loading ? 'Sending…' : 'Send reset link'}
+              </button>
+            </form>
+          ) : forgotStep === 'username' ? (
             <form onSubmit={handleForgotLookup} style={s.form}>
               <input
                 type="text"
@@ -296,7 +313,7 @@ export const Login = ({ auth }) => {
 
             {/* ---------- Username method ---------- */}
             {method === 'username' && (
-              <form onSubmit={handleSubmit} style={s.form}>
+              <form onSubmit={handleUsernameSubmit} style={s.form}>
                 <input
                   type="text"
                   placeholder="Username"
@@ -343,82 +360,67 @@ export const Login = ({ auth }) => {
                 <button type="submit" style={s.submitBtn} disabled={loading || !auth.isConfigured}>
                   {loading ? 'Please wait…' : mode === 'signin' ? 'Sign In' : 'Create Account'}
                 </button>
+              </form>
+            )}
 
-                {mode === 'signin' && (
-                  <button type="button" style={{ ...s.linkBtn, alignSelf: 'center', marginTop: '0.25rem' }} onClick={() => switchMode('forgot')}>
-                    Forgot password?
-                  </button>
+            {/* ---------- Email method ---------- */}
+            {method === 'email' && (
+              <form onSubmit={handleEmailSubmit} style={s.form}>
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={s.input}
+                  autoComplete="email"
+                  disabled={!auth.isConfigured}
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={s.input}
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                  disabled={!auth.isConfigured}
+                />
+
+                {error && <div style={s.error}>{error}</div>}
+                {info && <div style={s.info}>{info}</div>}
+
+                <button type="submit" style={s.submitBtn} disabled={loading || !auth.isConfigured}>
+                  {loading ? 'Please wait…' : mode === 'signin' ? 'Sign In' : 'Create Account'}
+                </button>
+                {mode === 'signup' && (
+                  <div style={s.hint}>We'll email you a verification link to confirm your account.</div>
                 )}
               </form>
             )}
 
-            {/* ---------- Email method (passwordless OTP) ---------- */}
-            {method === 'email' && (
-              emailStep === 'enter' ? (
-                <form onSubmit={handleSendCode} style={s.form}>
-                  <input
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={s.input}
-                    autoComplete="email"
-                    disabled={!auth.isConfigured}
-                  />
-                  {error && <div style={s.error}>{error}</div>}
-                  {info && <div style={s.info}>{info}</div>}
-                  <button type="submit" style={s.submitBtn} disabled={loading || !auth.isConfigured}>
-                    {loading ? 'Sending…' : 'Email me a sign-in code'}
-                  </button>
-                  <div style={s.hint}>No password needed — your inbox verifies you. New here? An account is created automatically.</div>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyCode} style={s.form}>
-                  <div style={s.qLabel}>Enter the 6-digit code sent to {email.trim()}</div>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="••••••"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                    style={s.codeInput}
-                    autoComplete="one-time-code"
-                    autoFocus
-                  />
-                  {error && <div style={s.error}>{error}</div>}
-                  {info && <div style={s.info}>{info}</div>}
-                  <button type="submit" style={s.submitBtn} disabled={loading}>
-                    {loading ? 'Verifying…' : 'Verify & sign in'}
-                  </button>
-                  <div style={s.codeFooter}>
-                    <button type="button" style={s.linkBtn} onClick={handleResend} disabled={loading}>
-                      Resend code
-                    </button>
-                    <button type="button" style={s.linkBtn} onClick={() => { clearMsgs(); setEmailStep('enter'); setCode(''); }}>
-                      Use a different email
-                    </button>
-                  </div>
-                </form>
-              )
+            {/* Forgot password (sign-in only) */}
+            {mode === 'signin' && (
+              <button
+                type="button"
+                style={{ ...s.linkBtn, display: 'block', margin: '0.9rem auto 0' }}
+                onClick={() => switchMode('forgot')}
+              >
+                Forgot password?
+              </button>
             )}
           </>
         )}
 
         {/* ---------- Footer switch row ---------- */}
         <div style={s.switchRow}>
-          {!isForgot && method === 'username' && mode === 'signin' && (
+          {!isForgot && mode === 'signin' && (
             <>No account?{' '}
               <button style={s.linkBtn} onClick={() => switchMode('signup')}>Create one</button>
             </>
           )}
-          {!isForgot && method === 'username' && mode === 'signup' && (
+          {!isForgot && mode === 'signup' && (
             <>Already have an account?{' '}
               <button style={s.linkBtn} onClick={() => switchMode('signin')}>Sign in</button>
             </>
-          )}
-          {!isForgot && method === 'email' && (
-            <span style={{ color: theme.textMuted }}>Sign in and sign up are the same with email.</span>
           )}
           {isForgot && (
             <button style={s.linkBtn} onClick={() => switchMode('signin')}>← Back to sign in</button>
@@ -588,19 +590,6 @@ const s = {
     fontFamily: 'inherit',
     outline: 'none',
   },
-  codeInput: {
-    padding: '0.85rem 1rem',
-    background: theme.bg,
-    border: `1px solid ${theme.borderStrong}`,
-    borderRadius: '10px',
-    color: theme.text,
-    fontSize: '1.6rem',
-    fontWeight: 700,
-    letterSpacing: '0.5em',
-    textAlign: 'center',
-    fontFamily: 'inherit',
-    outline: 'none',
-  },
   error: {
     color: theme.danger,
     fontSize: '0.8rem',
@@ -636,11 +625,6 @@ const s = {
     fontFamily: 'inherit',
     marginTop: '0.25rem',
     boxShadow: '0 8px 22px rgba(56,189,248,0.28)',
-  },
-  codeFooter: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    marginTop: '0.25rem',
   },
   switchRow: {
     textAlign: 'center',

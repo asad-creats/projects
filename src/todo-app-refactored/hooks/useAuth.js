@@ -149,32 +149,16 @@ export const useAuth = () => {
     return data;
   };
 
-  // --- Email auth (passwordless: magic link + 6-digit OTP code) ----------
-  // Works regardless of the "Confirm email" signup toggle, so username login
-  // (which needs confirmation OFF) and verified email login coexist. The
-  // emailed link/code IS the verification — no password is stored for email
-  // accounts; the inbox itself is the recovery method.
-
-  const sendEmailOtp = async (email) => {
+  // Email forgot-password: sends a reset link to the inbox. This is the
+  // "in case you forget" fallback for email+password accounts (the username
+  // equivalent is the security-question flow above).
+  const resetPasswordForEmail = async (email) => {
     if (!supabase) throw new Error('Supabase not configured');
     if (!isValidEmail(email)) {
       return { error: { message: 'Enter a valid email address.' } };
     }
-    return supabase.auth.signInWithOtp({
-      email: normalizeEmail(email),
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/todo`,
-      },
-    });
-  };
-
-  const verifyEmailOtp = async (email, token) => {
-    if (!supabase) throw new Error('Supabase not configured');
-    return supabase.auth.verifyOtp({
-      email: normalizeEmail(email),
-      token: String(token).trim(),
-      type: 'email',
+    return supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
+      redirectTo: `${window.location.origin}/todo`,
     });
   };
 
@@ -198,8 +182,7 @@ export const useAuth = () => {
     signUpWithUsername,
     getSecurityQuestion,
     resetPasswordWithAnswer,
-    sendEmailOtp,
-    verifyEmailOtp,
+    resetPasswordForEmail,
     signOut,
   };
 };
