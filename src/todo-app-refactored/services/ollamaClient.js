@@ -9,15 +9,12 @@ export class OllamaClient {
   async listModels() {
     try {
       const response = await fetch(`${this.baseUrl}/api/tags`);
-
-      if (!response.ok) {
-        throw new Error(`Ollama API error: ${response.statusText}`);
-      }
-
+      if (!response.ok) return [];
       const data = await response.json();
       return data.models || [];
-    } catch (error) {
-      console.error('Ollama list models error:', error);
+    } catch {
+      // Ollama isn't running / isn't reachable (expected on a deployed site,
+      // where the browser blocks loopback access). Stay quiet — no console noise.
       return [];
     }
   }
@@ -43,7 +40,6 @@ export class OllamaClient {
       const data = await response.json();
       return data.message?.content || '';
     } catch (error) {
-      console.error('Ollama chat error:', error);
       throw new Error(`Failed to connect to Ollama. Make sure it's running on ${this.baseUrl}`);
     }
   }
