@@ -4,7 +4,9 @@ import { supabase } from '../../supabaseClient';
 // Usernames are mapped to a synthetic internal email so Supabase's email-based
 // Auth can store the credential. No mail is ever sent to these addresses
 // (email confirmation must be disabled in the Supabase dashboard).
-const USERNAME_DOMAIN = 'taskuser.app';
+// NOTE: do NOT use a `.app` TLD here — Supabase's email validator rejects it
+// ("email_address_invalid"). `.io`/`.dev`/`.co` etc. all pass.
+const USERNAME_DOMAIN = 'taskuser.io';
 
 export const normalizeUsername = (u) => String(u || '').trim().toLowerCase();
 export const usernameToEmail = (u) => `${normalizeUsername(u)}@${USERNAME_DOMAIN}`;
