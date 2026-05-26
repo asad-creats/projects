@@ -208,8 +208,10 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
 /* ───────── AI rail ───────── */
 .ai-rail{border-left:1px solid var(--line);background:linear-gradient(to bottom, var(--bg-2), var(--bg));
   display:flex;flex-direction:column;height:100vh;position:sticky;top:0;overflow:hidden}
-.ai-h{padding:18px 20px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
-.ai-title{display:flex;align-items:center;gap:10px}
+.ai-h{padding:18px 20px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line)}
+.ai-title{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto}
+.ai-title>div{min-width:0}
+.ai-title .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ai-orb{width:24px;height:24px;border-radius:999px;position:relative;flex-shrink:0;
   background:conic-gradient(from 0deg, oklch(82% 0.18 95), oklch(75% 0.15 320), oklch(78% 0.15 240), oklch(82% 0.18 95));
   box-shadow:0 0 18px oklch(82% 0.18 95 / .35);
@@ -218,11 +220,11 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
 @keyframes tally-spin{to{transform:rotate(360deg)}}
 .ai-title b{font-size:14px;font-weight:600;letter-spacing:-.005em}
 .ai-title .sub{font-size:11px;color:var(--ink-3);margin-top:1px}
-.ai-ctrl{display:flex;gap:6px}
+.ai-ctrl{display:flex;align-items:center;gap:6px;flex-shrink:0}
 .ai-ctrl button{appearance:none;background:transparent;border:1px solid var(--line);
   width:28px;height:28px;border-radius:7px;color:var(--ink-3);display:grid;place-items:center;cursor:pointer}
 .ai-ctrl button:hover{background:var(--panel);color:var(--ink)}
-.ai-badge{font-size:10.5px;color:var(--ink-3);padding:4px 9px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
+.ai-badge{font-size:10.5px;color:var(--ink-3);padding:4px 9px;border:1px solid var(--line);border-radius:999px;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis}
 
 .ai-suggest{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
 .ai-suggest .lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}

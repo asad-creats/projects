@@ -65,7 +65,7 @@ export const AgentChat = ({
           </div>
         </div>
         <div className="ai-ctrl">
-          <span className="ai-badge">{statusBadge}</span>
+          <span className="ai-badge" title={statusBadge}>{statusBadge}</span>
           <button title="AI settings" onClick={onOpenSettings}><Icon.settings style={{ width: 14, height: 14 }} /></button>
           {onClose && <button title="Hide panel" onClick={onClose}><Icon.close style={{ width: 14, height: 14 }} /></button>}
         </div>
