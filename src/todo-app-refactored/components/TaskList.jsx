@@ -1,56 +1,28 @@
 import React from 'react';
-import { styles } from '../styles/styles';
 import { TaskItem } from './TaskItem';
-import { SkeletonLoader } from './SkeletonLoader';
 
 export const TaskList = ({
-  todos,
+  sections,
+  total = 0,
   onToggle,
   onDelete,
   onSuggestionsClick,
   showSuggestions,
   loadingSuggestions,
-  taskSuggestions,
+  taskSuggestions = {},
   onCloseSuggestions,
   onRegenerateSuggestions,
   ollamaConnected,
-  loading = false
 }) => {
-  if (loading) {
+  if (!sections.length) {
     return (
-      <div style={styles.taskList}>
-        {[...Array(5)].map((_, index) => (
-          <div key={index} style={styles.taskCard}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-              <SkeletonLoader type="taskCard" style={{ width: '20px', height: '20px', borderRadius: '4px', marginTop: '2px' }} />
-              <div style={{ flex: 1 }}>
-                <SkeletonLoader type="taskCard" style={{ height: '16px', width: '70%', marginBottom: '8px' }} />
-                <div style={{ display: 'flex', gap: '1rem', fontSize: '0.75rem' }}>
-                  <SkeletonLoader type="taskCard" style={{ height: '12px', width: '50px' }} />
-                  <SkeletonLoader type="taskCard" style={{ height: '12px', width: '60px' }} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <SkeletonLoader type="taskCard" style={{ width: '24px', height: '24px', borderRadius: '4px' }} />
-                <SkeletonLoader type="taskCard" style={{ width: '24px', height: '24px', borderRadius: '4px' }} />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (todos.length === 0) {
-    return (
-      <div style={styles.taskList}>
-        <div style={styles.emptyState}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📝</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-            No tasks yet
-          </div>
-          <div style={{ color: '#64748b' }}>
-            Ask the AI assistant to add your first task!
+      <div className="tasks">
+        <div className="empty">
+          <div className="big">{total === 0 ? 'No tasks yet.' : 'All clear.'}</div>
+          <div>
+            {total === 0
+              ? 'Add your first task above, or ask the AI assistant to create one.'
+              : 'Nothing matches this view. Try a different filter.'}
           </div>
         </div>
       </div>
@@ -58,21 +30,29 @@ export const TaskList = ({
   }
 
   return (
-    <div style={styles.taskList}>
-      {todos.map(todo => (
-        <TaskItem
-          key={todo.id}
-          todo={todo}
-          onToggle={onToggle}
-          onDelete={onDelete}
-          onSuggestionsClick={onSuggestionsClick}
-          showSuggestions={showSuggestions}
-          loadingSuggestions={loadingSuggestions}
-          suggestions={taskSuggestions[todo.id]}
-          onCloseSuggestions={onCloseSuggestions}
-          onRegenerateSuggestions={onRegenerateSuggestions}
-          ollamaConnected={ollamaConnected}
-        />
+    <div className="tasks">
+      {sections.map((sec) => (
+        <React.Fragment key={sec.id}>
+          <div className="sect-h">
+            {sec.label} <span className="tnum" style={{ color: 'var(--ink-4)' }}>{sec.items.length}</span>
+            <span className="line" />
+          </div>
+          {sec.items.map((todo) => (
+            <TaskItem
+              key={todo.id}
+              todo={todo}
+              onToggle={onToggle}
+              onDelete={onDelete}
+              onSuggestionsClick={onSuggestionsClick}
+              showSuggestions={showSuggestions}
+              loadingSuggestions={loadingSuggestions}
+              suggestions={taskSuggestions[todo.id]}
+              onCloseSuggestions={onCloseSuggestions}
+              onRegenerateSuggestions={onRegenerateSuggestions}
+              ollamaConnected={ollamaConnected}
+            />
+          ))}
+        </React.Fragment>
       ))}
     </div>
   );

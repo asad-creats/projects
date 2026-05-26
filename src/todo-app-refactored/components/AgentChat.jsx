@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
-import { styles } from '../styles/styles';
 import { DEFAULT_MODELS } from '../hooks/useAiConfig';
+import { Icon } from './TallyIcons';
 
 export const AgentChat = ({
   messages,
@@ -10,22 +10,19 @@ export const AgentChat = ({
   onSendMessage,
   aiConfig,
   onOpenSettings,
+  onClose,
   freeUsage,
   ollamaConnected,
-  quickActions,
-  isNarrow,
+  quickActions = [],
   rootRef,
-  settingsBtnRef,
 }) => {
-  const messagesEndRef = useRef(null);
-  const messagesContainerRef = useRef(null);
+  const chatRef = useRef(null);
 
   const FREE_LIMIT = freeUsage?.limit ?? 4;
   const freeUsed = freeUsage?.used ?? 0;
   const freeRemaining = Math.max(0, FREE_LIMIT - freeUsed);
   const freeCapped = aiConfig.mode === 'free' && freeRemaining <= 0;
 
-  // Readiness depends on the selected mode/provider.
   const providerReady =
     aiConfig.mode === 'free'
       ? !freeCapped
@@ -33,26 +30,24 @@ export const AgentChat = ({
         ? ollamaConnected
         : !!aiConfig.apiKey;
 
-  // Status badge text.
   const statusBadge = (() => {
     if (aiConfig.mode === 'free') {
-      return freeCapped ? '⚠️ Daily limit reached' : `Free · ${freeRemaining}/${FREE_LIMIT} left`;
+      return freeCapped ? 'Daily limit reached' : `Free · ${freeRemaining}/${FREE_LIMIT} left`;
     }
     if (aiConfig.provider === 'ollama') {
-      return ollamaConnected ? '🏠 Ollama connected' : '🏠 Ollama not running';
+      return ollamaConnected ? 'Ollama connected' : 'Ollama offline';
     }
     const model = aiConfig.model || DEFAULT_MODELS[aiConfig.provider];
-    return aiConfig.apiKey ? `🔑 ${model}` : '⚠️ Add your API key';
+    return aiConfig.apiKey ? model : 'Add your API key';
   })();
 
-  // Scroll only the chat container — not the whole page.
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (container) container.scrollTop = container.scrollHeight;
+    const c = chatRef.current;
+    if (c) c.scrollTop = c.scrollHeight;
   }, [messages, aiLoading]);
 
   const placeholder = providerReady
-    ? 'Ask me anything…'
+    ? 'Plan my day, draft an email, add a task…'
     : aiConfig.mode === 'free'
       ? 'Daily free limit reached — add your own key in settings'
       : aiConfig.provider === 'ollama'
@@ -60,104 +55,93 @@ export const AgentChat = ({
         : 'Add your API key in AI Settings…';
 
   return (
-    <div ref={rootRef} style={{ ...styles.agentContainer, height: isNarrow ? '70vh' : styles.agentContainer.height }}>
-      <div style={styles.agentHeader}>
-        <div>
-          <div style={styles.agentTitle}>🤖 AI Assistant</div>
-          <div style={styles.agentSubtitle}>Ask me anything about your tasks</div>
+    <aside className="ai-rail" ref={rootRef}>
+      <div className="ai-h">
+        <div className="ai-title">
+          <div className="ai-orb" />
+          <div>
+            <div><b>Tally AI</b></div>
+            <div className="sub">Plans, drafts, and gentle nudges</div>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={styles.agentBadge}>{statusBadge}</div>
-          <button ref={settingsBtnRef} style={styles.settingsBtn} onClick={onOpenSettings} title="AI settings">⚙️</button>
+        <div className="ai-ctrl">
+          <span className="ai-badge">{statusBadge}</span>
+          <button title="AI settings" onClick={onOpenSettings}><Icon.settings style={{ width: 14, height: 14 }} /></button>
+          {onClose && <button title="Hide panel" onClick={onClose}><Icon.close style={{ width: 14, height: 14 }} /></button>}
         </div>
       </div>
 
-      <div style={styles.agentMessages} ref={messagesContainerRef}>
-        {messages.length === 0 && (
-          <div style={styles.emptyState}>
-            <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>💬</div>
-            <div style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-              Start a conversation
-            </div>
-            <div style={{ color: '#64748b', fontSize: '0.875rem' }}>
-              Ask me to manage tasks, analyze productivity, or suggest priorities
-            </div>
-          </div>
-        )}
-
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            style={{ ...styles.message, ...(msg.role === 'user' ? styles.userMessage : styles.agentMessage) }}
-          >
-            <div style={styles.messageHeader}>
-              <div style={styles.messageRole}>
-                {msg.role === 'user' ? '👤 You' : '🤖 Assistant'}
-              </div>
-              {msg.action && msg.action !== 'none' && (
-                <div style={styles.toolBadge}>🛠️ {msg.action}</div>
-              )}
-            </div>
-            <div style={styles.messageContent}>{msg.content}</div>
-            {msg.toolResult && msg.toolResult.length > 0 && (
-              <div style={styles.toolResults}>
-                {msg.toolResult.map((result, i) => (
-                  <div key={i} style={styles.toolResultItem}>
-                    {result.success ? '✅' : '❌'} {result.message || result.error}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {aiLoading && (
-          <div style={styles.message}>
-            <div style={styles.aiLoaderContainer}>
-              <div style={styles.aiLoaderText}>Thinking</div>
-              <div style={{ ...styles.aiLoaderDot, animationDelay: '0s' }} />
-              <div style={{ ...styles.aiLoaderDot, animationDelay: '0.2s' }} />
-              <div style={{ ...styles.aiLoaderDot, animationDelay: '0.4s' }} />
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {messages.length === 0 && (
-        <div style={styles.quickActions}>
-          {quickActions.map((action, idx) => (
-            <button
-              key={idx}
-              onClick={() => onSendMessage(action)}
-              style={styles.quickActionBtn}
-              disabled={!providerReady}
-            >
-              {action}
+      {messages.length === 0 && quickActions.length > 0 && (
+        <div className="ai-suggest">
+          <div className="lbl">Try asking</div>
+          {quickActions.slice(0, 4).map((action, i) => (
+            <button key={i} className="sg" onClick={() => onSendMessage(action)} disabled={!providerReady}>
+              <div className="sg-icon">{i % 2 === 0 ? <Icon.zap style={{ width: 12, height: 12 }} /> : <Icon.brain style={{ width: 12, height: 12 }} />}</div>
+              <div className="sg-body">{action}</div>
             </button>
           ))}
         </div>
       )}
 
-      <div style={styles.agentInput}>
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && providerReady && !aiLoading && onSendMessage(input)}
-          placeholder={placeholder}
-          style={styles.agentInputField}
-          disabled={!providerReady || aiLoading}
-        />
-        <button
-          onClick={() => onSendMessage(input)}
-          style={styles.agentSendBtn}
-          disabled={!providerReady || aiLoading || !input.trim()}
-        >
-          Send
-        </button>
+      <div className="chat" ref={chatRef}>
+        {messages.length === 0 && (
+          <div className="chat-empty">
+            Ask me to manage tasks, analyze productivity, or plan your day.
+          </div>
+        )}
+
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`msg ${msg.role === 'user' ? 'user' : 'ai'}`}>
+            <div className="av">{msg.role === 'user' ? 'You'.charAt(0) : <Icon.sparkle style={{ width: 13, height: 13 }} />}</div>
+            <div className="bubble">
+              {msg.content}
+              {msg.action && msg.action !== 'none' && (
+                <div className="ai-action"><Icon.check style={{ width: 11, height: 11 }} /> {msg.action}</div>
+              )}
+              {msg.toolResult && msg.toolResult.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>
+                  {msg.toolResult.map((r, i) => (
+                    <div key={i}>{r.success ? '✓' : '✕'} {r.message || r.error}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {aiLoading && (
+          <div className="msg ai">
+            <div className="av"><Icon.sparkle style={{ width: 13, height: 13 }} /></div>
+            <div className="bubble" style={{ padding: 0, border: 0 }}>
+              <div className="typing"><i /><i /><i /></div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+
+      <div className="composer-ai">
+        <div className="ai-input">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && providerReady && !aiLoading) onSendMessage(input); }}
+            placeholder={placeholder}
+            disabled={!providerReady || aiLoading}
+          />
+          <button
+            className="send"
+            onClick={() => onSendMessage(input)}
+            disabled={!providerReady || aiLoading || !input.trim()}
+            title="Send"
+          >
+            <Icon.send style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+        <div className="ai-hint">
+          <span>Tally remembers context across the chat</span>
+          <button className="linkish" style={{ fontSize: 11 }} onClick={onOpenSettings}>Settings</button>
+        </div>
+      </div>
+    </aside>
   );
 };

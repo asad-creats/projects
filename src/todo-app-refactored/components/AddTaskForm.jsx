@@ -1,54 +1,48 @@
 import React from 'react';
-import { styles } from '../styles/styles';
+import { Icon } from './TallyIcons';
 
+const CATEGORIES = ['General', 'Work', 'Personal', 'Shopping', 'Health', 'Learning'];
 
-export const AddTaskForm = ({ 
-  newTaskText, 
-  setNewTaskText, 
-  newTaskDate, 
-  setNewTaskDate, 
-  newTaskCategory, 
+export const AddTaskForm = ({
+  newTaskText,
+  setNewTaskText,
+  newTaskDate,
+  setNewTaskDate,
+  newTaskCategory,
   setNewTaskCategory,
-  onSubmit 
+  onSubmit,
 }) => {
   return (
-    <form onSubmit={onSubmit} style={styles.addTaskForm}>
-      <div style={styles.addTaskHeader}>
-        <span style={styles.addTaskTitle}>➕ Add New Task</span>
-      </div>
-      <div style={styles.addTaskInputs}>
-        <input
-          type="text"
-          value={newTaskText}
-          onChange={(e) => setNewTaskText(e.target.value)}
-          placeholder="What needs to be done?"
-          style={styles.taskInput}
-          required
-        />
-        <div style={styles.taskMetaInputs}>
+    <form className="composer" onSubmit={onSubmit}>
+      <div className="plus"><Icon.plus style={{ width: 14, height: 14 }} /></div>
+      <input
+        className="title"
+        value={newTaskText}
+        onChange={(e) => setNewTaskText(e.target.value)}
+        placeholder="Add a task… e.g. “Email Marcus tomorrow about Q3 budget”"
+      />
+      <div className="chips">
+        <label className="chip-input" title="Due date">
+          <Icon.calendar style={{ width: 11, height: 11 }} />
           <input
             type="date"
             value={newTaskDate}
             onChange={(e) => setNewTaskDate(e.target.value)}
-            style={styles.dateInput}
-            required
+            style={{ background: 'transparent', border: 0, color: 'inherit', outline: 0, font: 'inherit', width: 120, colorScheme: 'dark' }}
           />
-          <select
-            value={newTaskCategory}
-            onChange={(e) => setNewTaskCategory(e.target.value)}
-            style={styles.categoryInput}
-          >
-            <option value="General">General</option>
-            <option value="Work">Work</option>
-            <option value="Personal">Personal</option>
-            <option value="Shopping">Shopping</option>
-            <option value="Health">Health</option>
-            <option value="Learning">Learning</option>
-          </select>
-          <button type="submit" style={styles.addTaskButton}>
-            Add Task
-          </button>
-        </div>
+        </label>
+        <select
+          className="chip-input"
+          value={newTaskCategory}
+          onChange={(e) => setNewTaskCategory(e.target.value)}
+          title="Category"
+          style={{ appearance: 'none' }}
+        >
+          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <button type="submit" className="add-btn" disabled={!newTaskText.trim()}>
+          Add task <span className="k mono">↵</span>
+        </button>
       </div>
     </form>
   );

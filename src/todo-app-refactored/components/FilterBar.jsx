@@ -1,23 +1,28 @@
 import React from 'react';
-import { styles } from '../styles/styles';
 
-export const FilterBar = ({ filter, setFilter }) => {
-  return (
-    <div style={styles.filterBar}>
-      <div style={styles.filterButtons}>
-        {['all', 'active', 'completed'].map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              ...styles.filterButton,
-              ...(filter === f ? styles.filterButtonActive : {})
-            }}
-          >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-          </button>
-        ))}
-      </div>
+const TABS = [
+  { id: 'all', label: 'All' },
+  { id: 'active', label: 'Active' },
+  { id: 'today', label: 'Today' },
+  { id: 'overdue', label: 'Overdue' },
+  { id: 'done', label: 'Completed' },
+];
+
+export const FilterBar = ({ filter, setFilter, counts = {} }) => (
+  <div className="filterbar">
+    <div className="filter-tabs">
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          className={`ft ${filter === t.id ? 'active' : ''}`}
+          onClick={() => setFilter(t.id)}
+        >
+          {t.label} <span className="cnt tnum">{counts[t.id] ?? 0}</span>
+        </button>
+      ))}
     </div>
-  );
-};
+    <div className="right-tools">
+      <span>Sort: <span style={{ color: 'var(--ink-2)' }}>Smart</span></span>
+    </div>
+  </div>
+);

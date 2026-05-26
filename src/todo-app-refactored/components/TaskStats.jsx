@@ -1,61 +1,35 @@
 import React from 'react';
-import { styles } from '../styles/styles';
-import { theme } from '../styles/theme';
-import { SkeletonLoader } from './SkeletonLoader';
 
-export const TaskStats = ({ stats, loading = false }) => {
-  if (loading) {
-    return (
-      <div style={styles.statsGrid}>
-        {[0, 1, 2, 3].map((i) => (
-          <div style={styles.statCard} key={i}>
-            <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
-            <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
-          </div>
-        ))}
+export const TaskStats = ({ today = 0, completed = 0, inProgress = 0, overdue = 0, completionPct = 0 }) => (
+  <div className="stats">
+    <div className="stat">
+      <div className="k">Today</div>
+      <div className="v">
+        <span className="num tnum">{today}</span>
+        <span className="delta">{completionPct}% done</span>
       </div>
-    );
-  }
-
-  const cards = [
-    { key: 'total', label: 'Total', value: stats.total, color: theme.accent },
-    { key: 'completed', label: 'Completed', value: stats.completed, color: theme.success },
-    { key: 'pending', label: 'Pending', value: stats.pending, color: theme.warning },
-    {
-      key: 'overdue',
-      label: 'Overdue',
-      value: stats.overdue,
-      color: stats.overdue > 0 ? theme.danger : theme.textSecondary,
-      alert: stats.overdue > 0,
-    },
-  ];
-
-  return (
-    <div style={styles.statsGrid}>
-      {cards.map((c) => (
-        <div
-          key={c.key}
-          style={{
-            ...styles.statCard,
-            borderColor: c.alert ? theme.danger : theme.border,
-          }}
-        >
-          {/* top accent bar */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: '3px',
-              background: c.color,
-              opacity: c.alert ? 0.9 : 0.55,
-            }}
-          />
-          <div style={{ ...styles.statValue, color: c.color }}>{c.value}</div>
-          <div style={styles.statLabel}>{c.label}</div>
-        </div>
-      ))}
+      <div className="bar"><i style={{ width: completionPct + '%' }} /></div>
     </div>
-  );
-};
+    <div className="stat is-good">
+      <div className="k">Completed</div>
+      <div className="v">
+        <span className="num tnum">{completed}</span>
+        <span className="delta">all time</span>
+      </div>
+    </div>
+    <div className="stat">
+      <div className="k">In progress</div>
+      <div className="v">
+        <span className="num tnum">{Math.max(0, inProgress)}</span>
+        <span className="delta">active</span>
+      </div>
+    </div>
+    <div className={`stat ${overdue > 0 ? 'is-warn' : ''}`}>
+      <div className="k">Overdue</div>
+      <div className="v">
+        <span className="num tnum">{overdue}</span>
+        <span className="delta">{overdue > 0 ? 'needs attention' : 'all clear'}</span>
+      </div>
+    </div>
+  </div>
+);
