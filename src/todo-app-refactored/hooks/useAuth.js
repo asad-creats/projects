@@ -9,6 +9,8 @@ const USERNAME_DOMAIN = 'taskuser.app';
 export const normalizeUsername = (u) => String(u || '').trim().toLowerCase();
 export const usernameToEmail = (u) => `${normalizeUsername(u)}@${USERNAME_DOMAIN}`;
 export const isValidUsername = (u) => /^[a-z0-9._-]{3,30}$/.test(normalizeUsername(u));
+export const normalizeEmail = (e) => String(e || '').trim().toLowerCase();
+export const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(e));
 
 // SHA-256 hex of the normalized answer. MUST match the Edge Function's hashing
 // (trim + lowercase) so signup and reset produce the same digest.
@@ -147,6 +149,35 @@ export const useAuth = () => {
     return data;
   };
 
+  // --- Email auth (passwordless: magic link + 6-digit OTP code) ----------
+  // Works regardless of the "Confirm email" signup toggle, so username login
+  // (which needs confirmation OFF) and verified email login coexist. The
+  // emailed link/code IS the verification — no password is stored for email
+  // accounts; the inbox itself is the recovery method.
+
+  const sendEmailOtp = async (email) => {
+    if (!supabase) throw new Error('Supabase not configured');
+    if (!isValidEmail(email)) {
+      return { error: { message: 'Enter a valid email address.' } };
+    }
+    return supabase.auth.signInWithOtp({
+      email: normalizeEmail(email),
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/todo`,
+      },
+    });
+  };
+
+  const verifyEmailOtp = async (email, token) => {
+    if (!supabase) throw new Error('Supabase not configured');
+    return supabase.auth.verifyOtp({
+      email: normalizeEmail(email),
+      token: String(token).trim(),
+      type: 'email',
+    });
+  };
+
   const signOut = async () => {
     if (!supabase) return;
     return supabase.auth.signOut();
@@ -167,6 +198,8 @@ export const useAuth = () => {
     signUpWithUsername,
     getSecurityQuestion,
     resetPasswordWithAnswer,
+    sendEmailOtp,
+    verifyEmailOtp,
     signOut,
   };
 };

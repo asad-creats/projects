@@ -18,12 +18,13 @@ export const styles = {
 
   title: {
     fontSize: '2.5rem',
-    fontWeight: '700',
+    fontWeight: '800',
     background: theme.gradient,
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     backgroundClip: 'text',
     marginBottom: '0.5rem',
+    letterSpacing: '-0.03em',
   },
 
   subtitle: {
@@ -74,18 +75,23 @@ export const styles = {
   },
 
   statCard: {
-    background: theme.surface,
-    padding: '1.5rem',
-    borderRadius: '12px',
+    background: `linear-gradient(180deg, ${theme.surfaceElevated}, ${theme.surface})`,
+    padding: '1.5rem 1rem',
+    borderRadius: theme.radius,
     border: `1px solid ${theme.border}`,
     textAlign: 'center',
+    boxShadow: theme.shadowSm,
+    position: 'relative',
+    overflow: 'hidden',
   },
 
   statValue: {
-    fontSize: '2rem',
-    fontWeight: '700',
+    fontSize: '2.1rem',
+    fontWeight: '800',
     color: theme.text,
-    marginBottom: '0.5rem',
+    marginBottom: '0.35rem',
+    lineHeight: 1,
+    letterSpacing: '-0.02em',
   },
 
   statLabel: {
@@ -96,10 +102,11 @@ export const styles = {
   },
 
   addTaskForm: {
-    background: theme.surface,
+    background: `linear-gradient(180deg, ${theme.surfaceElevated}, ${theme.surface})`,
     padding: '1.5rem',
-    borderRadius: '12px',
+    borderRadius: theme.radius,
     border: `1px solid ${theme.border}`,
+    boxShadow: theme.shadowSm,
   },
 
   addTaskHeader: {
@@ -161,16 +168,17 @@ export const styles = {
 
   addTaskButton: {
     padding: '0.75rem 1.5rem',
-    background: theme.accent,
+    background: theme.gradient,
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '10px',
     color: 'white',
     fontSize: '0.875rem',
-    fontWeight: '600',
+    fontWeight: '700',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     fontFamily: 'inherit',
     whiteSpace: 'nowrap',
+    boxShadow: '0 6px 18px rgba(56,189,248,0.25)',
   },
 
   filterBar: {
@@ -238,9 +246,10 @@ export const styles = {
   taskCard: {
     background: theme.surface,
     padding: '1rem',
-    borderRadius: '12px',
+    borderRadius: theme.radius,
     border: `1px solid ${theme.border}`,
     transition: 'all 0.2s ease',
+    boxShadow: theme.shadowSm,
   },
 
   taskCardOverdue: {
@@ -663,5 +672,33 @@ styleSheet.textContent = `
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
   }
+
+  /* ---- Global polish (cascades across the inline-styled app) ---- */
+  *, *::before, *::after { box-sizing: border-box; }
+
+  /* Accessible focus ring on every input/select/textarea */
+  input:focus, select:focus, textarea:focus {
+    border-color: ${theme.accent} !important;
+    box-shadow: 0 0 0 3px ${theme.ring} !important;
+  }
+  input::placeholder, textarea::placeholder { color: ${theme.textMuted}; }
+
+  /* Subtle lift + press feedback on buttons */
+  button { transition: transform .14s ease, filter .18s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease; }
+  button:hover:not(:disabled) { filter: brightness(1.08); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: 0.55; cursor: not-allowed; }
+  a { transition: color .18s ease, opacity .18s ease; }
+
+  ::selection { background: rgba(56,189,248,0.30); color: #fff; }
+
+  /* Quieter, themed scrollbars */
+  * { scrollbar-width: thin; scrollbar-color: rgba(148,163,184,0.30) transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.25); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+  *::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.45); background-clip: padding-box; }
+
+  @keyframes floatBadge { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 `;
 document.head.appendChild(styleSheet);

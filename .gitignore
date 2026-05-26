@@ -22,3 +22,7 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# local Claude Code settings + auto-generated session handoff
+.claude/settings.local.json
+HANDOFF.md

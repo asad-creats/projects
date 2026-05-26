@@ -7,46 +7,55 @@ export const TaskStats = ({ stats, loading = false }) => {
   if (loading) {
     return (
       <div style={styles.statsGrid}>
-        <div style={styles.statCard}>
-          <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
-          <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
-        </div>
-        <div style={styles.statCard}>
-          <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
-          <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
-        </div>
-        <div style={styles.statCard}>
-          <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
-          <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
-        </div>
-        <div style={styles.statCard}>
-          <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
-          <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
-        </div>
+        {[0, 1, 2, 3].map((i) => (
+          <div style={styles.statCard} key={i}>
+            <SkeletonLoader type="statCard" style={{ height: '30px', width: '40px', margin: '0 auto 10px' }} />
+            <SkeletonLoader type="statCard" style={{ height: '12px', width: '50px', margin: '0 auto' }} />
+          </div>
+        ))}
       </div>
     );
   }
 
+  const cards = [
+    { key: 'total', label: 'Total', value: stats.total, color: theme.accent },
+    { key: 'completed', label: 'Completed', value: stats.completed, color: theme.success },
+    { key: 'pending', label: 'Pending', value: stats.pending, color: theme.warning },
+    {
+      key: 'overdue',
+      label: 'Overdue',
+      value: stats.overdue,
+      color: stats.overdue > 0 ? theme.danger : theme.textSecondary,
+      alert: stats.overdue > 0,
+    },
+  ];
+
   return (
     <div style={styles.statsGrid}>
-      <div style={styles.statCard}>
-        <div style={styles.statValue}>{stats.total}</div>
-        <div style={styles.statLabel}>Total</div>
-      </div>
-      <div style={styles.statCard}>
-        <div style={styles.statValue}>{stats.completed}</div>
-        <div style={styles.statLabel}>Completed</div>
-      </div>
-      <div style={styles.statCard}>
-        <div style={styles.statValue}>{stats.pending}</div>
-        <div style={styles.statLabel}>Pending</div>
-      </div>
-      <div style={{...styles.statCard, borderColor: stats.overdue > 0 ? theme.danger : theme.border}}>
-        <div style={{...styles.statValue, color: stats.overdue > 0 ? theme.danger : theme.text}}>
-          {stats.overdue}
+      {cards.map((c) => (
+        <div
+          key={c.key}
+          style={{
+            ...styles.statCard,
+            borderColor: c.alert ? theme.danger : theme.border,
+          }}
+        >
+          {/* top accent bar */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '3px',
+              background: c.color,
+              opacity: c.alert ? 0.9 : 0.55,
+            }}
+          />
+          <div style={{ ...styles.statValue, color: c.color }}>{c.value}</div>
+          <div style={styles.statLabel}>{c.label}</div>
         </div>
-        <div style={styles.statLabel}>Overdue</div>
-      </div>
+      ))}
     </div>
   );
 };

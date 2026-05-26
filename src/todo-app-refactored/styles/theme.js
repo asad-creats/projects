@@ -19,4 +19,13 @@ export const theme = {
   agentAccent: '#60a5fa',
   agentBg: 'rgba(96, 165, 250, 0.08)',
   agentBorder: 'rgba(96, 165, 250, 0.22)',
+  // Elevation, focus ring, shadows and radii for a more polished surface system
+  surfaceElevated: '#1a2330',
+  borderStrong: 'rgba(148, 163, 184, 0.22)',
+  ring: 'rgba(56, 189, 248, 0.35)',
+  shadowSm: '0 1px 2px rgba(0,0,0,0.25)',
+  shadow: '0 10px 30px rgba(2, 6, 23, 0.45)',
+  shadowLg: '0 24px 70px rgba(2, 6, 23, 0.6)',
+  radius: '14px',
+  radiusLg: '20px',
 };
