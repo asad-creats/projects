@@ -625,11 +625,17 @@ ONLY respond in plain English if the user is making casual conversation (like "h
     } catch (error) {
       console.error('Error processing query:', error);
       
-      let errorMsg = `Sorry, I encountered an error: ${error.message}.`;
-      if (this.provider === 'ollama') {
-        errorMsg += ' Make sure Ollama is running on localhost:11434.';
+      let errorMsg;
+      if (error.code === 'AUTH_ERROR' || error.code === 'PAYMENT_ERROR' || error.code === 'BAD_REQUEST' || error.code === 'RATE_LIMITED' || error.code === 'SERVER_ERROR' || error.code === 'NETWORK_ERROR') {
+        errorMsg = `⚠️ ${error.message}`;
+      } else if (this.provider === 'openrouter') {
+        errorMsg = `⚠️ OpenRouter error: ${error.message}. Check your API key and model in AI Settings.`;
+      } else if (this.provider === 'ollama') {
+        errorMsg = `⚠️ ${error.message}. Make sure Ollama is running on localhost:11434.`;
       } else if (this.provider === 'gemini') {
-        errorMsg += ' Check your Gemini API key.';
+        errorMsg = `⚠️ ${error.message}. Check your Gemini API key in AI Settings.`;
+      } else {
+        errorMsg = `⚠️ Sorry, something went wrong: ${error.message}`;
       }
       
       const providerInfo = this.getProvider();
