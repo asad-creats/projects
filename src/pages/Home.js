@@ -10,6 +10,7 @@ function Home() {
       title: "Realtor Doc Processor",
       description: "AI pipeline that classifies, splits, and organizes messy real estate PDF packets into named documents with a transaction summary. Uses Ollama vision models + OCR.",
       link: null,
+      externalLink: "https://realtor-doc-processor.vercel.app/",
       icon: <FaFileAlt />,
       category: "AI / Python",
       level: "Full-Stack",
