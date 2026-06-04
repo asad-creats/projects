@@ -43,14 +43,14 @@ function Home() {
   const projects = [
     {
       title: "Realtor Doc Processor",
-      description: "AI pipeline that classifies, splits, and organizes messy real estate PDF packets into named documents with a transaction summary. Runs a text model (NVIDIA Nemotron Super) and a vision model together, reconciling both readings for accuracy, plus OCR.",
+      description: "AI pipeline that classifies, splits, and organizes messy real estate PDF packets into named documents with a transaction summary. Uses Google Gemini (multimodal) to read both document text and page images, with OCR for scanned pages.",
       link: null,
       externalLink: "https://realtor-doc-processor.vercel.app/",
       logo: <DocProcessorLogo />,
       group: "Real Estate",
       category: "AI / Python",
       level: "Full-Stack",
-      tech: ["Python", "FastAPI", "Nemotron", "Vision LLM", "OCR"],
+      tech: ["Python", "FastAPI", "Gemini", "Vision", "OCR"],
     },
     {
       title: "TC Command Center",
