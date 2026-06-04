@@ -344,5 +344,12 @@ kbd{font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--ink-3);borde
 .proj-tech{margin-top:14px;display:flex;flex-wrap:wrap;gap:6px}
 .proj-tech span{background:var(--bg-2);color:var(--accent);padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line)}
 .proj-cat{display:inline-block;background:var(--bg-2);color:var(--ink-3);padding:3px 9px;border-radius:999px;font-size:10.5px;margin-top:10px;border:1px solid var(--line)}
+.proj-icon.proj-logo{background:transparent;padding:0;box-shadow:none}
+.proj-icon.proj-logo svg{width:40px;height:40px}
+.home-group{margin-bottom:6px}
+.home-group-title{max-width:1180px;margin:0 auto;padding:0 40px 14px;display:flex;align-items:center;gap:10px;
+  font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3)}
+.home-group-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;
+  background:var(--bg-2);border:1px solid var(--line);font-size:11px;font-weight:600;color:var(--ink-3)}
 .home-foot{text-align:center;margin-top:24px;padding:20px;color:var(--ink-4);font-size:13px}
 .home-empty{text-align:center;color:var(--ink-3);font-size:16px;margin-top:24px}

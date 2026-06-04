@@ -26,6 +26,22 @@ const isDueToday = (date) => relativeDue(date).label === 'Today';
 function Todo() {
   const auth = useAuth();
 
+  // Brand the browser tab as "Tally" while the todo app is mounted, then
+  // restore the portfolio's title/favicon on the way out.
+  useEffect(() => {
+    const prevTitle = document.title;
+    const iconEl = document.querySelector("link[rel='icon']");
+    const prevIcon = iconEl ? iconEl.getAttribute('href') : null;
+
+    document.title = 'Tally — Smart To-Dos';
+    if (iconEl) iconEl.setAttribute('href', '/tally-favicon.svg');
+
+    return () => {
+      document.title = prevTitle;
+      if (iconEl && prevIcon != null) iconEl.setAttribute('href', prevIcon);
+    };
+  }, []);
+
   if (!auth.authReady) {
     return <div className="tally-loader">Loading…</div>;
   }
