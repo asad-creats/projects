@@ -69,7 +69,9 @@
   body { margin: 0; }
   .app {
     font-family: var(--sans);
-    background: var(--bg);
+    background:
+      radial-gradient(1100px 460px at 50% -240px, color-mix(in srgb, var(--accent) 9%, transparent), transparent),
+      var(--bg);
     color: var(--ink);
     min-height: 100vh;
     line-height: 1.45;
@@ -122,30 +124,31 @@
   .view.on { display: block; }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-  .head { margin-bottom: 22px; }
-  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
-  .head h2 { margin: 0; font-size: clamp(22px, 3vw, 28px); letter-spacing: -.025em; font-weight: 680; text-wrap: balance; }
-  .head p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; font-size: 14px; }
+  .head { margin-bottom: 24px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0 0 8px; display: inline-flex; align-items: center; gap: 8px; }
+  .eyebrow::before { content: ""; width: 18px; height: 2px; background: var(--accent); border-radius: 2px; }
+  .head h2 { margin: 0; font-size: clamp(25px, 3.4vw, 33px); letter-spacing: -.03em; font-weight: 700; text-wrap: balance; line-height: 1.08; }
+  .head p { margin: 9px 0 0; color: var(--muted); max-width: 64ch; font-size: 14.5px; }
 
   /* ---------- Stat strip ---------- */
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 26px; }
-  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 17px; box-shadow: var(--shadow); }
-  .stat .k { font-family: var(--mono); font-size: 12px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; }
-  .stat .v { font-family: var(--mono); font-size: 27px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); position: relative; }
+  .stat .k { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: .07em; text-transform: uppercase; }
+  .stat .v { font-family: var(--mono); font-size: 29px; font-weight: 600; letter-spacing: -.03em; margin-top: 5px; font-variant-numeric: tabular-nums; line-height: 1.05; }
   .stat .v small { font-size: 14px; color: var(--faint); }
 
   /* ---------- Employee grid ---------- */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 15px; }
   .card {
     background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 18px; box-shadow: var(--shadow); cursor: pointer; text-align: left; width: 100%;
-    font-family: var(--sans); color: var(--ink); transition: transform .16s, border-color .16s;
-    display: flex; flex-direction: column; gap: 14px;
+    padding: 19px; box-shadow: var(--shadow); cursor: pointer; text-align: left; width: 100%;
+    font-family: var(--sans); color: var(--ink); transition: transform .18s cubic-bezier(.3,0,.2,1), border-color .18s, box-shadow .18s;
+    display: flex; flex-direction: column; gap: 15px;
   }
-  .card:hover { transform: translateY(-3px); border-color: var(--accent); }
+  .card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 2px 4px rgba(20,26,40,.06), 0 18px 40px -20px color-mix(in srgb, var(--accent) 55%, rgba(20,26,40,.4)); }
   .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .who { display: flex; align-items: center; gap: 12px; }
-  .avatar { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; color: #fff; font-weight: 650; font-size: 15px; flex: none; }
+  .who { display: flex; align-items: center; gap: 13px; }
+  .avatar { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #fff; font-weight: 650; font-size: 15px; flex: none; transition: box-shadow .2s; letter-spacing: .02em; }
   .who .name { font-weight: 620; font-size: 15px; letter-spacing: -.01em; }
   .who .role { font-size: 12.5px; color: var(--muted); }
 
@@ -339,6 +342,44 @@
   .hr-work .hw-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .done-flag { font-family: var(--mono); font-size: 11px; color: var(--good); display: inline-flex; align-items: center; gap: 4px; }
 
+  /* ---------- Capacity bar: done + pending vs the 8h day ---------- */
+  .cap-bar { height: 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; display: flex; }
+  .cap-bar .seg { height: 100%; transition: width .55s cubic-bezier(.4,0,.1,1); }
+  .cap-bar .seg.done { background: var(--good); }
+  .cap-bar .seg.pending { background: var(--accent); }
+  .cap-bar .seg.pending.busy { background: var(--busy); }
+  .cap-bar .seg.pending.over { background: var(--over); }
+  .cap-legend { display: flex; gap: 15px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 9px; letter-spacing: .02em; }
+  .cap-legend i { font-style: normal; display: inline-flex; align-items: center; gap: 5px; }
+  .cap-legend .sw { width: 8px; height: 8px; border-radius: 3px; }
+  .cap-legend .sw.d { background: var(--good); } .cap-legend .sw.p { background: var(--accent); } .cap-legend .sw.f { background: var(--surface-2); border: 1px solid var(--line); }
+
+  /* ---------- Proposal type tags + retime form ---------- */
+  .ptag { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 7px; border-radius: 6px; font-weight: 700; }
+  .ptag.new { background: var(--accent-soft); color: var(--accent); }
+  .ptag.retime { background: var(--busy-soft); color: var(--busy); }
+  .retime-old { font-family: var(--mono); font-size: 12px; color: var(--faint); text-decoration: line-through; }
+  .retime-arrow { color: var(--faint); margin: 0 4px; }
+  .mini-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .mini-form .mf-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .mini-form .mf-row { display: flex; gap: 7px; align-items: center; }
+  .mini-form input[type="number"] { width: 92px; }
+  .mini-form .mf-hint { font-size: 11.5px; color: var(--muted); }
+
+  /* ---------- HR propose bar ---------- */
+  .hr-propose { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px; box-shadow: var(--shadow); margin-bottom: 22px; }
+  .hr-propose .hp-icon { width: 38px; height: 38px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 18px; flex: none; }
+  .hr-propose .hp-text { flex: 1; }
+  .hr-propose .hp-text b { font-size: 14px; font-weight: 620; letter-spacing: -.01em; }
+  .hr-propose .hp-text span { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .hp-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .hp-form input[type="text"] { width: 220px; }
+  .hp-form input[type="number"] { width: 96px; }
+
+  /* pending-proposal card in the ledger */
+  .pending-block { border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 12px; padding: 15px 18px; background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+  .pending-block .pb-top { display: flex; align-items: center; gap: 10px; }
+
   .toast {
     position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(30px);
     background: var(--ink); color: var(--bg); padding: 11px 18px; border-radius: 10px; font-size: 13px;
@@ -382,7 +423,16 @@
       <div class="head">
         <p class="eyebrow">Today · Manager view</p>
         <h2>Team availability</h2>
-        <p>Availability is computed from sealed task hours against each person's daily capacity — no one sets their own status. Open a card to review the day and assign work.</p>
+        <p>Availability is computed from committed task hours against each person's daily capacity — no one sets their own status. Open a card to review the day and assign work.</p>
+      </div>
+      <div class="hr-propose">
+        <div class="hp-icon">＋</div>
+        <div class="hp-text"><b>Propose a new task</b><span>Only HR can add tasks. It goes to team consensus before anyone can be assigned to it.</span></div>
+        <div class="hp-form">
+          <input type="text" id="hpTitle" placeholder="Task name" maxlength="46">
+          <input type="number" id="hpHours" placeholder="hrs" min="0.5" max="8" step="0.5">
+          <button class="btn" id="hpBtn">Open for consensus</button>
+        </div>
       </div>
       <div class="stats" id="hrStats"></div>
       <div class="filterbar" id="hrFilterBar"></div>
@@ -416,18 +466,9 @@
       </div>
       <div class="ledger-wrap">
         <div class="propose-card">
-          <h3>Propose a task</h3>
-          <p class="sub">Opens a vote in the consensus queue. It's assignable only after quorum seals it.</p>
-          <div class="field">
-            <label for="pTitle">Task name</label>
-            <input type="text" id="pTitle" placeholder="e.g. Client onboarding call" maxlength="46">
-          </div>
-          <div class="field">
-            <label for="pHours">Proposed hours</label>
-            <input type="number" id="pHours" placeholder="2" min="0.5" max="8" step="0.5">
-          </div>
-          <button class="btn wide" id="proposeBtn">Open for consensus</button>
-          <div class="locked-note">⚿ Quorum: majority of <span id="teamSize"></span> employees</div>
+          <h3>Awaiting consensus</h3>
+          <p class="sub">Proposals seal into the chain once a majority of <span id="teamSize"></span> employees agree. New tasks come from HR; time changes come from employees.</p>
+          <div id="ledgerPending"></div>
         </div>
         <div class="chain" id="chain"></div>
       </div>
@@ -490,7 +531,8 @@
     e4: [A("t5", { state: "done", actualH: 0.8 }), A("t6")],
     e5: [A("t4", { state: "late", actualH: 2.5, reason: "Upstream export API was down for ~40 min; retried until it cleared." }), A("t5", { state: "done", actualH: 1 }), A("t2")],
   };
-  let lateFor = null; // {eid,tid} while a late-reason form is open in the employee view
+  let lateFor = null;   // {eid,tid} while a late-reason form is open in the employee view
+  let retimeFor = null; // tid while a time-change form is open in the employee view
 
   const proposals = []; // {id,title,hours,proposer,votes:[eid]}
   let proposalSeq = 1;
@@ -573,8 +615,8 @@
   const FILTERS = [
     ["all", "All", () => true],
     ["working", "Working now", eid => !!activeOf(eid)],
-    ["room", "Has room", eid => remainingLoad(eid) < CAP],
-    ["over", "Overloaded", eid => remainingLoad(eid) > CAP],
+    ["room", "Has room", eid => scheduledLoad(eid) < CAP],
+    ["over", "Overloaded", eid => scheduledLoad(eid) > CAP],
   ];
 
   // ---------- Toast ----------
@@ -588,17 +630,20 @@
   }
 
   // ---------- HR render ----------
+  function pendClass(st) { return st.cls === "over" ? "over" : st.cls === "busy" ? "busy" : ""; }
+
   function renderHR() {
     const totalCap = employees.length * CAP;
-    let remainTeam = 0, over = 0, working = 0;
+    let freeTeam = 0, over = 0, working = 0;
     employees.forEach(e => {
-      remainTeam += remainingLoad(e.id);
-      if (remainingLoad(e.id) > CAP) over++;
+      const committed = scheduledLoad(e.id);
+      freeTeam += Math.max(0, CAP - committed);
+      if (committed > CAP) over++;
       if (activeOf(e.id)) working++;
     });
     $("#hrStats").innerHTML = `
       <div class="stat"><div class="k">Team capacity</div><div class="v">${totalCap}<small>h</small></div></div>
-      <div class="stat"><div class="k">Remaining today</div><div class="v">${(remainTeam % 1 ? remainTeam.toFixed(1) : remainTeam)}<small>h</small></div></div>
+      <div class="stat"><div class="k">Free to assign</div><div class="v" style="color:var(--good)">${(freeTeam % 1 ? freeTeam.toFixed(1) : freeTeam)}<small>h</small></div></div>
       <div class="stat"><div class="k">Working now</div><div class="v" style="color:${working ? 'var(--accent)' : 'var(--ink)'}">${working}</div></div>
       <div class="stat"><div class="k">Overloaded</div><div class="v" style="color:${over ? 'var(--over)' : 'var(--ink)'}">${over}</div></div>`;
 
@@ -610,10 +655,14 @@
     const shown = employees.filter(e => pred(e.id));
     if (!shown.length) { $("#empGrid").innerHTML = `<div class="empty" style="grid-column:1/-1">No one matches this filter right now.</div>`; return; }
     $("#empGrid").innerHTML = shown.map(e => {
-      const remain = remainingLoad(e.id), st = status(remain);
-      const pct = Math.min(100, (remain / CAP) * 100);
+      const committed = scheduledLoad(e.id), st = status(committed);
+      const doneB = doneBudget(e.id), pending = committed - doneB;
+      const denom = Math.max(CAP, committed);
+      const doneW = doneB / denom * 100, pendW = pending / denom * 100;
+      const free = Math.max(0, CAP - committed);
       const total = rowsOf(e.id).length, done = doneCount(e.id);
       const act = activeOf(e.id);
+      const ringColor = st.cls === "over" ? "var(--over)" : st.cls === "busy" ? "var(--busy)" : st.cls === "free" && committed > 0 ? "var(--good)" : "var(--line)";
       const workLine = act
         ? `<div class="hr-work"><span class="work-dot"></span><span class="mono" data-clock="${e.id}|${act.tid}">${fmtClock(elapsedMs(act))}</span><span class="hw-name">· ${taskById(act.tid).title}</span></div>`
         : (done === total && total > 0
@@ -622,7 +671,7 @@
       return `
       <button class="card" data-emp="${e.id}">
         <div class="who">
-          <div class="avatar" style="background:${e.c}">${initials(e.name)}</div>
+          <div class="avatar" style="background:${e.c};box-shadow:0 0 0 3px color-mix(in srgb, ${ringColor} 30%, transparent)">${initials(e.name)}</div>
           <div>
             <div class="name">${e.name}</div>
             <div class="role">${e.role}</div>
@@ -630,11 +679,14 @@
         </div>
         <div class="load">
           <div class="load-top">
-            <span class="hrs"><b>${fmtH(remain)}</b> <span style="color:var(--faint)">left / ${CAP}h</span></span>
+            <span class="hrs"><b>${fmtH(committed)}</b> <span style="color:var(--faint)">/ ${CAP}h committed</span></span>
             <span class="pill ${st.cls}">${st.label}</span>
           </div>
-          <div class="track"><div class="fill ${st.cls}" style="width:${pct}%"></div></div>
-          <div class="cap-note">${remain > CAP ? '+' + fmtH(remain - CAP) + ' over capacity' : fmtH(CAP - remain) + ' free to assign'}</div>
+          <div class="cap-bar">
+            <div class="seg done" style="width:${doneW}%"></div>
+            <div class="seg pending ${pendClass(st)}" style="width:${pendW}%"></div>
+          </div>
+          <div class="cap-note">${committed > CAP ? '⚠ +' + fmtH(committed - CAP) + ' over capacity' : '<b style="color:var(--good)">' + fmtH(free) + '</b> free to assign'} · ${done}/${total} done</div>
         </div>
         ${workLine}
       </button>`;
@@ -659,7 +711,9 @@
 
   function renderDrawer() {
     const e = empById(currentEmp);
-    const remain = remainingLoad(e.id), st = status(remain), pct = Math.min(100, remain / CAP * 100);
+    const committed = scheduledLoad(e.id), st = status(committed);
+    const doneB = doneBudget(e.id), pending = committed - doneB, free = Math.max(0, CAP - committed);
+    const denom = Math.max(CAP, committed);
     $("#dAvatar").style.background = e.c;
     $("#dAvatar").textContent = initials(e.name);
     $("#dName").textContent = e.name;
@@ -688,12 +742,20 @@
     const assignedIds = rows.map(a => a.tid);
     const avail = catalog.filter(t => !assignedIds.includes(t.id));
     const options = avail.map(t => `<option value="${t.id}">${t.title} · ${fmtH(t.hours)}</option>`).join("");
-    const wouldWarn = remain >= CAP;
+    const wouldWarn = committed >= CAP;
     $("#drawerBody").innerHTML = `
       <div>
-        <div class="section-label"><span>Remaining load</span><span>${fmtH(remain)} / ${CAP}h</span></div>
-        <div class="track" style="height:10px"><div class="fill ${st.cls}" style="width:${pct}%"></div></div>
-        <div class="cap-note" style="margin-top:8px">${remain > CAP ? '⚠ ' + fmtH(remain - CAP) + ' over capacity' : fmtH(CAP - remain) + ' free to assign'} · ${doneCount(e.id)}/${rows.length} done · ${fmtH(workedH(e.id))} logged</div>
+        <div class="section-label"><span>Day committed</span><span>${fmtH(committed)} / ${CAP}h</span></div>
+        <div class="cap-bar" style="height:11px">
+          <div class="seg done" style="width:${doneB / denom * 100}%"></div>
+          <div class="seg pending ${pendClass(st)}" style="width:${pending / denom * 100}%"></div>
+        </div>
+        <div class="cap-legend">
+          <i><span class="sw d"></span>${fmtH(doneB)} done</i>
+          <i><span class="sw p"></span>${fmtH(pending)} pending</i>
+          <i><span class="sw f"></span>${fmtH(free)} free</i>
+        </div>
+        <div class="cap-note" style="margin-top:9px">${committed > CAP ? '⚠ ' + fmtH(committed - CAP) + ' over capacity' : '<b style="color:var(--good)">' + fmtH(free) + '</b> free to assign'} · ${fmtH(workedH(e.id))} actually logged</div>
       </div>
       <div>
         <div class="section-label"><span>Tasks today</span><span>${rows.length}</span></div>
@@ -717,9 +779,9 @@
       </button>`).join("");
 
     const e = empById(selfEmp);
-    const remain = remainingLoad(e.id), st = status(remain);
     const rows = rowsOf(e.id), act = activeOf(e.id);
-    const sched = scheduledLoad(e.id), worked = workedH(e.id);
+    const sched = scheduledLoad(e.id), remain = remainingLoad(e.id), worked = workedH(e.id);
+    const st = status(sched); // availability reflects the whole committed day
     const compPct = sched ? Math.round(doneBudget(e.id) / sched * 100) : 0; // % of today's work done
     const allDone = sched > 0 && remain === 0;
     const accent = st.cls === 'over' ? 'var(--over)' : st.cls === 'busy' ? 'var(--busy)' : 'var(--good)';
@@ -747,6 +809,8 @@
     const taskRows = rows.length ? rows.map(a => {
       const t = taskById(a.tid), [cls, lbl] = STATE_PILL[a.state];
       const openLate = lateFor && lateFor.eid === e.id && lateFor.tid === a.tid;
+      const openRetime = retimeFor === a.tid;
+      const retimePending = proposals.some(p => p.type === "retime" && p.taskId === a.tid);
       let meta = `<span class="st ${cls}">${lbl}</span>`;
       if (a.state === "active") meta += ` <span class="actual" data-clock="${e.id}|${a.tid}">${fmtClock(elapsedMs(a))}</span>`;
       else if (a.state === "paused") meta += ` <span class="actual">${fmtClock(elapsedMs(a))} logged</span>`;
@@ -762,8 +826,20 @@
           ${primary}
           <button class="abtn" data-done="${a.tid}">✓ Complete</button>
           <button class="abtn danger" data-late="${a.tid}">⚑ Late</button>
+          <button class="abtn" data-retime="${a.tid}" ${retimePending ? "disabled title='Time change already in the queue'" : ""}>⏱ Time</button>
         </div>`;
       }
+      const retimeForm = openRetime ? `<div class="mini-form">
+        <span class="mf-label">Propose a new time for “${t.title}”</span>
+        <div class="mf-row">
+          <input type="number" id="retimeInput" value="${t.hours}" min="0.5" max="8" step="0.5">
+          <span class="mf-hint">now ${fmtH(t.hours)} · needs team consensus</span>
+        </div>
+        <div class="lf-row">
+          <button class="abtn go" data-retimeok="${a.tid}">Propose change</button>
+          <button class="abtn" data-retimecancel="1">Cancel</button>
+        </div>
+      </div>` : "";
       const lateForm = openLate ? `<div class="late-form">
         <textarea id="lateReason" placeholder="What held this task up? (visible to HR)"></textarea>
         <div class="lf-row">
@@ -780,6 +856,7 @@
         </div>
         <div class="tc-meta">${meta}</div>
         ${a.reason ? `<div class="reason"><b>Your reason</b><br>${escapeHtml(a.reason)}</div>` : ""}
+        ${retimeForm}
         ${lateForm}
       </div>`;
     }).join("") : `<div class="empty">Nothing assigned yet today.</div>`;
@@ -812,8 +889,9 @@
   // ---------- Proposals ----------
   function renderProposals(sel, votable) {
     const host = $(sel);
+    if (!host) return;
     if (!proposals.length) {
-      host.innerHTML = `<div class="empty">No open proposals. Add one from the Task Ledger tab.</div>`;
+      host.innerHTML = `<div class="empty">Nothing awaiting consensus. HR can propose a new task; employees can propose time changes.</div>`;
       return;
     }
     const need = quorumNeeded();
@@ -822,17 +900,21 @@
       const reached = count >= need;
       const qpct = Math.min(100, count / need * 100);
       const iVoted = p.votes.includes(selfEmp);
+      const isRetime = p.type === "retime";
       const avs = p.votes.map(id => {
         const e = empById(id);
         return `<span class="va" style="background:${e.c}" title="${e.name}">${initials(e.name)}</span>`;
       }).join("");
+      const hoursCell = isRetime
+        ? `<div class="p-hrs"><span class="retime-old">${fmtH(p.oldHours)}</span><span class="retime-arrow">→</span>${fmtH(p.hours)}</div>`
+        : `<div class="p-hrs">${fmtH(p.hours)}</div>`;
       return `<div class="prop">
         <div class="p-top">
           <div>
             <div class="p-title">${p.title}</div>
-            <div class="p-meta">proposed by ${p.proposer}</div>
+            <div class="p-meta"><span class="ptag ${isRetime ? 'retime' : 'new'}">${isRetime ? 'Time change' : 'New task'}</span> proposed by ${p.proposer}</div>
           </div>
-          <div class="p-hrs">${fmtH(p.hours)}</div>
+          ${hoursCell}
         </div>
         <div class="votes">
           <div class="quorum-bar"><div class="quorum-fill" style="width:${qpct}%;background:${reached ? 'var(--good)' : 'var(--accent)'}"></div></div>
@@ -849,7 +931,8 @@
 
   // ---------- Ledger ----------
   function renderChain() {
-    $("#teamSize").textContent = employees.length;
+    const ts = $("#teamSize"); if (ts) ts.textContent = employees.length;
+    renderProposals("#ledgerPending", false);
     const blocks = [...chain].reverse();
     $("#chain").innerHTML = blocks.map((b, i) => {
       const isGen = b.index === 0;
@@ -857,15 +940,18 @@
         const e = empById(id); if (!e) return "";
         return `<span class="va" style="background:${e.c}">${initials(e.name)}</span>`;
       }).join("");
+      const hoursCell = isGen ? "" : (b.kind === "retime"
+        ? `<div class="b-hrs" title="retimed">${b.note || fmtH(b.hours)}</div>`
+        : `<div class="b-hrs">${fmtH(b.hours)}</div>`);
       const block = `
         <div class="block ${isGen ? 'genesis' : ''}">
           <div class="b-head">
             <div class="b-index">${b.index}</div>
             <div>
-              <div class="b-title">${b.title}</div>
+              <div class="b-title">${b.title} ${b.kind === "retime" ? '<span class="ptag retime">retime</span>' : ''}</div>
               <div class="b-sub">sealed ${b.time}</div>
             </div>
-            ${isGen ? '' : `<div class="b-hrs">${fmtH(b.hours)}</div>`}
+            ${hoursCell}
           </div>
           <div class="hashes">
             <div><span class="hk">hash</span><span class="hv">${b.hash}</span></div>
@@ -927,15 +1013,24 @@
       if (a && a.state === "active") el.style.width = Math.min(100, elapsedMs(a) / (budgetH(a) * 3600000) * 100) + "%";
     });
   }
-  function addProposal(title, hours) {
-    proposals.push({ id: "p" + (proposalSeq++), title, hours, proposer: empById(selfEmp).name.split(" ")[0], votes: [selfEmp] });
-    toast(`Proposal opened — <b>${title}</b> · needs ${quorumNeeded()} to agree`);
+  // HR opens a NEW-task proposal (no self-vote — HR proposes, employees decide)
+  function addNewTask(title, hours) {
+    proposals.push({ id: "p" + (proposalSeq++), type: "new", title, hours, proposer: "HR", votes: [] });
+    toast(`New-task proposal opened — <b>${title}</b> · needs ${quorumNeeded()} to agree`);
+  }
+  // An employee proposes a TIME CHANGE to an existing task (auto-votes their own)
+  function addRetime(tid, newHours) {
+    const t = taskById(tid);
+    if (proposals.some(p => p.type === "retime" && p.taskId === tid)) { toast(`A time change for <b>${t.title}</b> is already in the queue.`); return; }
+    proposals.push({ id: "p" + (proposalSeq++), type: "retime", taskId: tid, title: t.title, hours: newHours, oldHours: t.hours, proposer: empById(selfEmp).name.split(" ")[0], votes: [selfEmp] });
+    retimeFor = null; renderEmp();
+    toast(`Time change proposed — <b>${t.title}</b> ${fmtH(t.hours)} → ${fmtH(newHours)}`);
   }
   function toggleVote(pid) {
     const p = proposals.find(x => x.id === pid); if (!p) return;
     const i = p.votes.indexOf(selfEmp);
     if (i >= 0) p.votes.splice(i, 1); else p.votes.push(selfEmp);
-    renderEmp();
+    renderEmp(); renderChain();
   }
   function sealProposal(pid) {
     const idx = proposals.findIndex(x => x.id === pid);
@@ -943,15 +1038,23 @@
     const p = proposals[idx];
     const prev = chain[chain.length - 1].hash;
     const now = "2026-08-07 " + new Date().toTimeString().slice(0, 5);
+    let title, note = "";
+    if (p.type === "retime") {
+      const t = taskById(p.taskId);
+      note = `${fmtH(p.oldHours)} → ${fmtH(p.hours)}`;
+      title = `${t.title} — retimed`;
+      t.hours = p.hours; // amend the sealed cost; all budgets recompute from catalog
+    } else {
+      title = p.title;
+      catalog.push({ id: "t" + (catalog.length + 1) + "_" + Date.now(), title: p.title, hours: p.hours, block: chain.length });
+    }
     chain.push({
-      index: chain.length, title: p.title, hours: p.hours, voters: [...p.votes],
-      prevHash: prev, time: now, hash: fnv(p.title + "|" + p.hours + "|" + prev + "|" + p.votes.join(","))
+      index: chain.length, kind: p.type, title, hours: p.hours, note, voters: [...p.votes],
+      prevHash: prev, time: now, hash: fnv(title + "|" + p.hours + "|" + prev + "|" + p.votes.join(","))
     });
-    const newT = { id: "t" + (catalog.length + 1) + "_" + Date.now(), title: p.title, hours: p.hours, block: chain.length - 1 };
-    catalog.push(newT);
     proposals.splice(idx, 1);
     renderChain(); renderEmp(); renderHR();
-    toast(`⛓ <b>${p.title}</b> sealed — now assignable`);
+    toast(p.type === "retime" ? `⛓ <b>${p.title}</b> retimed to ${fmtH(p.hours)}` : `⛓ <b>${p.title}</b> sealed — now assignable`);
   }
 
   // ---------- Wiring ----------
@@ -996,12 +1099,21 @@
     if (b = t.closest("[data-start]")) return startTask(selfEmp, b.dataset.start);
     if (b = t.closest("[data-pause]")) return pauseTask(selfEmp, b.dataset.pause);
     if (b = t.closest("[data-done]")) return completeTask(selfEmp, b.dataset.done, false);
-    if (b = t.closest("[data-late]")) { lateFor = { eid: selfEmp, tid: b.dataset.late }; renderEmp(); $("#lateReason") && $("#lateReason").focus(); return; }
+    if (b = t.closest("[data-late]")) { lateFor = { eid: selfEmp, tid: b.dataset.late }; retimeFor = null; renderEmp(); $("#lateReason") && $("#lateReason").focus(); return; }
     if (b = t.closest("[data-latecancel]")) { lateFor = null; return renderEmp(); }
     if (b = t.closest("[data-lateok]")) {
       const r = ($("#lateReason").value || "").trim();
       if (!r) { toast("Add a short reason so HR has context."); $("#lateReason").focus(); return; }
       return completeTask(selfEmp, b.dataset.lateok, true, r);
+    }
+    if (b = t.closest("[data-retime]")) { retimeFor = b.dataset.retime; lateFor = null; renderEmp(); $("#retimeInput") && $("#retimeInput").focus(); return; }
+    if (b = t.closest("[data-retimecancel]")) { retimeFor = null; return renderEmp(); }
+    if (b = t.closest("[data-retimeok]")) {
+      const h = parseFloat($("#retimeInput").value);
+      if (!h || h <= 0) { toast("Enter a valid number of hours."); $("#retimeInput").focus(); return; }
+      const tid = b.dataset.retimeok;
+      if (h === taskById(tid).hours) { toast("That's the same as the current time."); return; }
+      return addRetime(tid, Math.min(8, h));
     }
   });
   $("#empProposals").addEventListener("click", e => {
@@ -1011,14 +1123,18 @@
     if (s) sealProposal(s.dataset.seal);
   });
 
-  $("#proposeBtn").addEventListener("click", () => {
-    const title = $("#pTitle").value.trim();
-    const hours = parseFloat($("#pHours").value);
-    if (!title) { toast("Give the task a name first."); $("#pTitle").focus(); return; }
-    if (!hours || hours <= 0) { toast("Set a valid hour cost."); $("#pHours").focus(); return; }
-    addProposal(title, Math.min(8, hours));
-    $("#pTitle").value = ""; $("#pHours").value = "";
-    toast(`Proposal opened — check the Employee tab to vote`);
+  $("#hpBtn").addEventListener("click", () => {
+    const title = $("#hpTitle").value.trim();
+    const hours = parseFloat($("#hpHours").value);
+    if (!title) { toast("Give the task a name first."); $("#hpTitle").focus(); return; }
+    if (!hours || hours <= 0) { toast("Set a valid hour cost."); $("#hpHours").focus(); return; }
+    addNewTask(title, Math.min(8, hours));
+    $("#hpTitle").value = ""; $("#hpHours").value = "";
+  });
+  // Seal from the ledger's pending queue
+  $("#ledgerPending").addEventListener("click", e => {
+    const s = e.target.closest("[data-seal]");
+    if (s) sealProposal(s.dataset.seal);
   });
 
   // Theme toggle
