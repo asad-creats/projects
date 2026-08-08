@@ -17,6 +17,22 @@ const TallyLogo = () => (
   </svg>
 );
 
+const QuorumLogo = () => (
+  <svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
+    <defs>
+      <linearGradient id="quorum-g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#5b63ff" />
+        <stop offset="1" stopColor="#3b45d6" />
+      </linearGradient>
+    </defs>
+    <rect x="1" y="1" width="38" height="38" rx="11" fill="url(#quorum-g)" />
+    <g fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="12.7" y="10.7" width="9" height="7" rx="3.5" transform="rotate(45 17.2 14.2)" />
+      <rect x="18.3" y="22.3" width="9" height="7" rx="3.5" transform="rotate(45 22.8 25.8)" />
+    </g>
+  </svg>
+);
+
 const DocProcessorLogo = () => (
   <svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
     <defs>
@@ -72,6 +88,17 @@ function Home() {
       category: "AI / Productivity",
       level: "Full-Stack",
       tech: ["React", "Supabase", "Ollama", "Gemini API"],
+    },
+    {
+      title: "Quorum",
+      description: "Workforce planning dashboard where an HR sees each employee's day as computed availability — never self-reported. Task hours are agreed by team consensus and sealed to a blockchain ledger; live timers track actual work, with complete/late-with-reason tracking.",
+      link: null,
+      externalLink: "/quorum.html",
+      logo: <QuorumLogo />,
+      group: "AI & Productivity",
+      category: "Product Design",
+      level: "Prototype",
+      tech: ["HTML", "CSS", "Vanilla JS", "Blockchain concept"],
     },
     {
       title: "Tilawah Together",

@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quorum — Consensus Task-Hour Ledger</title>
+<meta name="description" content="An HR dashboard where employee availability is computed from consensus-sealed task hours on a blockchain ledger, with live task timers and complete/late tracking.">
+<style>body{margin:0;background:#E9ECF2}@media (prefers-color-scheme:dark){body{background:#10131B}}</style>
+</head>
+<body>
+<style>
+  :root {
+    --bg: #E9ECF2;
+    --surface: #FFFFFF;
+    --surface-2: #F4F6FA;
+    --line: #D6DBE6;
+    --ink: #161A24;
+    --muted: #5C6579;
+    --faint: #8B93A6;
+    --accent: #3B45D6;
+    --accent-soft: #E7E8FB;
+    --good: #1F9D6B;
+    --good-soft: #DCF2E8;
+    --busy: #E0912F;
+    --busy-soft: #FBEEDA;
+    --over: #D64550;
+    --over-soft: #FBE1E3;
+    --shadow: 0 1px 2px rgba(20,26,40,.06), 0 8px 24px -12px rgba(20,26,40,.18);
+    --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", "SFMono-Regular", "Consolas", monospace;
+    --sans: system-ui, "Segoe UI", Roboto, -apple-system, sans-serif;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10131B;
+      --surface: #1A1E29;
+      --surface-2: #212634;
+      --line: #2C3242;
+      --ink: #EAEDF5;
+      --muted: #9AA3B8;
+      --faint: #6C7488;
+      --accent: #7B84FF;
+      --accent-soft: #24284A;
+      --good: #3FBE88;
+      --good-soft: #16281F;
+      --busy: #F0A748;
+      --busy-soft: #2C2314;
+      --over: #F26C77;
+      --over-soft: #2E1A1C;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #E9ECF2; --surface: #FFFFFF; --surface-2: #F4F6FA; --line: #D6DBE6;
+    --ink: #161A24; --muted: #5C6579; --faint: #8B93A6; --accent: #3B45D6;
+    --accent-soft: #E7E8FB; --good: #1F9D6B; --good-soft: #DCF2E8; --busy: #E0912F;
+    --busy-soft: #FBEEDA; --over: #D64550; --over-soft: #FBE1E3;
+    --shadow: 0 1px 2px rgba(20,26,40,.06), 0 8px 24px -12px rgba(20,26,40,.18);
+  }
+  :root[data-theme="dark"] {
+    --bg: #10131B; --surface: #1A1E29; --surface-2: #212634; --line: #2C3242;
+    --ink: #EAEDF5; --muted: #9AA3B8; --faint: #6C7488; --accent: #7B84FF;
+    --accent-soft: #24284A; --good: #3FBE88; --good-soft: #16281F; --busy: #F0A748;
+    --busy-soft: #2C2314; --over: #F26C77; --over-soft: #2E1A1C;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .app {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- App bar ---------- */
+  .bar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 20px;
+    padding: 14px clamp(16px, 4vw, 40px);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; margin-right: auto; }
+  .glyph {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: var(--accent); color: #fff;
+    display: grid; place-items: center; font-size: 18px;
+    box-shadow: 0 4px 14px -4px var(--accent);
+  }
+  .brand h1 { font-size: 18px; margin: 0; letter-spacing: -.02em; font-weight: 650; }
+  .brand p { margin: 0; font-size: 11.5px; color: var(--faint); letter-spacing: .01em; }
+
+  .tabs { display: flex; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 11px; border: 1px solid var(--line); }
+  .tab {
+    border: 0; background: transparent; color: var(--muted);
+    font-family: var(--sans); font-size: 13px; font-weight: 550;
+    padding: 7px 14px; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px; transition: .18s;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-selected="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
+  .tab .dot { font-size: 15px; }
+
+  .icon-btn {
+    border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+    width: 38px; height: 38px; border-radius: 10px; cursor: pointer; font-size: 16px;
+    display: grid; place-items: center; transition: .18s;
+  }
+  .icon-btn:hover { color: var(--ink); border-color: var(--accent); }
+
+  /* ---------- Layout ---------- */
+  main { padding: clamp(20px, 4vw, 40px); max-width: 1240px; margin: 0 auto; }
+  .view { display: none; animation: rise .35s ease both; }
+  .view.on { display: block; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .head { margin-bottom: 22px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
+  .head h2 { margin: 0; font-size: clamp(22px, 3vw, 28px); letter-spacing: -.025em; font-weight: 680; text-wrap: balance; }
+  .head p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; font-size: 14px; }
+
+  /* ---------- Stat strip ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 26px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 17px; box-shadow: var(--shadow); }
+  .stat .k { font-family: var(--mono); font-size: 12px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; }
+  .stat .v { font-family: var(--mono); font-size: 27px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 14px; color: var(--faint); }
+
+  /* ---------- Employee grid ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 15px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px; box-shadow: var(--shadow); cursor: pointer; text-align: left; width: 100%;
+    font-family: var(--sans); color: var(--ink); transition: transform .16s, border-color .16s;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .card:hover { transform: translateY(-3px); border-color: var(--accent); }
+  .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .who { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; color: #fff; font-weight: 650; font-size: 15px; flex: none; }
+  .who .name { font-weight: 620; font-size: 15px; letter-spacing: -.01em; }
+  .who .role { font-size: 12.5px; color: var(--muted); }
+
+  .load { display: flex; flex-direction: column; gap: 7px; }
+  .load-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .load-top .hrs { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .load-top .hrs b { font-weight: 600; }
+  .pill { font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
+  .pill.free { background: var(--good-soft); color: var(--good); }
+  .pill.busy { background: var(--busy-soft); color: var(--busy); }
+  .pill.over { background: var(--over-soft); color: var(--over); }
+  .track { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; position: relative; border: 1px solid var(--line); }
+  .fill { height: 100%; border-radius: 999px; transition: width .5s cubic-bezier(.4,0,.1,1); background: var(--good); }
+  .fill.busy { background: var(--busy); }
+  .fill.over { background: var(--over); }
+  .cap-note { font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+  .mini-tasks { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .chip-count { font-family: var(--mono); background: var(--surface-2); border: 1px solid var(--line); padding: 1px 7px; border-radius: 6px; font-size: 11px; }
+
+  /* ---------- Drawer ---------- */
+  .scrim { position: fixed; inset: 0; background: rgba(12,16,24,.42); opacity: 0; pointer-events: none; transition: .25s; z-index: 40; }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; height: 100%; width: min(430px, 92vw);
+    background: var(--surface); border-left: 1px solid var(--line); z-index: 50;
+    transform: translateX(100%); transition: transform .3s cubic-bezier(.4,0,.1,1);
+    display: flex; flex-direction: column; box-shadow: -20px 0 50px -30px rgba(0,0,0,.5);
+  }
+  .drawer.on { transform: none; }
+  .drawer header { padding: 20px; border-bottom: 1px solid var(--line); display: flex; gap: 13px; align-items: center; }
+  .drawer header .x { margin-left: auto; }
+  .drawer .body { padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 20px; }
+  .drawer .name-lg { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+  .drawer .role-lg { font-size: 12.5px; color: var(--muted); }
+
+  .section-label { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: 10px; display: flex; justify-content: space-between; }
+
+  .task-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 13px;
+    border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); margin-bottom: 8px;
+  }
+  .task-row .t-name { font-size: 13.5px; font-weight: 540; flex: 1; }
+  .task-row .t-hrs { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .task-row .t-verified { font-size: 12px; color: var(--good); }
+  .task-row .rm { border: 0; background: transparent; color: var(--faint); cursor: pointer; font-size: 15px; padding: 2px 5px; border-radius: 6px; }
+  .task-row .rm:hover { color: var(--over); background: var(--over-soft); }
+  .empty { font-size: 13px; color: var(--faint); padding: 14px; text-align: center; border: 1px dashed var(--line); border-radius: 11px; }
+
+  .assign-box { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 12px; padding: 14px; }
+  select, input[type="text"], input[type="number"] {
+    font-family: var(--sans); font-size: 13.5px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+    padding: 9px 11px; width: 100%;
+  }
+  select:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+  .btn {
+    font-family: var(--sans); font-size: 13.5px; font-weight: 580; cursor: pointer;
+    background: var(--accent); color: #fff; border: 0; border-radius: 9px; padding: 10px 15px;
+    transition: .16s; display: inline-flex; align-items: center; gap: 7px; justify-content: center;
+  }
+  .btn:hover { filter: brightness(1.07); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.ghost { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); }
+  .btn.wide { width: 100%; }
+  .btn.sm { padding: 6px 11px; font-size: 12.5px; }
+  .warn-note { font-size: 11.5px; color: var(--over); margin-top: 8px; font-family: var(--mono); }
+
+  /* ---------- Employee view ---------- */
+  .who-switch { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+  .who-chip {
+    display: flex; align-items: center; gap: 9px; padding: 7px 13px 7px 8px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-family: var(--sans);
+    color: var(--ink); font-size: 13px; font-weight: 520; transition: .16s;
+  }
+  .who-chip:hover { border-color: var(--accent); }
+  .who-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .who-chip .av-sm { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 600; }
+
+  .two-col { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; align-items: start; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+  .panel h3 { margin: 0 0 3px; font-size: 15px; font-weight: 630; letter-spacing: -.01em; }
+  .panel .sub { margin: 0 0 16px; font-size: 12.5px; color: var(--muted); }
+  .locked-note { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--faint); font-family: var(--mono); margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+
+  .big-load { text-align: center; padding: 8px 0 4px; }
+  .big-load .pct { font-family: var(--mono); font-size: 46px; font-weight: 600; letter-spacing: -.03em; line-height: 1; }
+  .big-load .lbl { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+
+  /* ---------- Proposals ---------- */
+  .prop { border: 1px solid var(--line); border-radius: 12px; padding: 15px; margin-bottom: 12px; background: var(--surface-2); }
+  .prop .p-top { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+  .prop .p-title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+  .prop .p-meta { font-size: 11.5px; color: var(--faint); font-family: var(--mono); margin-top: 3px; }
+  .prop .p-hrs { font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+  .votes { display: flex; align-items: center; gap: 9px; margin-top: 13px; }
+  .quorum-bar { flex: 1; height: 7px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+  .quorum-fill { height: 100%; background: var(--accent); transition: width .4s; }
+  .votes .vc { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .voter-avs { display: flex; margin-top: 11px; }
+  .voter-avs .va { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: #fff; font-size: 10px; font-weight: 600; margin-left: -5px; border: 2px solid var(--surface-2); }
+  .voter-avs .va:first-child { margin-left: 0; }
+  .p-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .sealed-tag { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--good); background: var(--good-soft); padding: 4px 9px; border-radius: 7px; }
+
+  /* ---------- Ledger / chain ---------- */
+  .ledger-wrap { display: grid; grid-template-columns: 340px 1fr; gap: 22px; align-items: start; }
+  .propose-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); position: sticky; top: 90px; }
+  .propose-card h3 { margin: 0 0 4px; font-size: 15px; font-weight: 630; }
+  .propose-card .sub { font-size: 12.5px; color: var(--muted); margin: 0 0 16px; }
+  .field { margin-bottom: 13px; }
+  .field label { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
+
+  .chain { display: flex; flex-direction: column; gap: 0; }
+  .block {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;
+    box-shadow: var(--shadow); position: relative;
+  }
+  .block.genesis { border-style: dashed; opacity: .9; }
+  .link { width: 2px; height: 22px; background: var(--line); margin-left: 30px; position: relative; }
+  .link::after { content: "⛓"; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); font-size: 13px; background: var(--bg); color: var(--faint); }
+  .block .b-head { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+  .b-index { font-family: var(--mono); font-size: 12px; font-weight: 600; background: var(--accent); color: #fff; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none; }
+  .block.genesis .b-index { background: var(--faint); }
+  .b-title { font-weight: 620; font-size: 14.5px; letter-spacing: -.01em; }
+  .b-sub { font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+  .b-hrs { margin-left: auto; font-family: var(--mono); font-weight: 600; font-size: 14px; color: var(--accent); }
+  .hashes { display: grid; gap: 5px; font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; }
+  .hashes div { display: flex; gap: 9px; overflow: hidden; }
+  .hashes .hk { color: var(--faint); flex: none; width: 66px; }
+  .hashes .hv { color: var(--ink); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+  .hashes .hv.prev { color: var(--muted); }
+  .b-votes { margin-top: 11px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); display: flex; align-items: center; gap: 7px; }
+
+  /* ---------- Task states / live timer ---------- */
+  .st { font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .st-todo { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+  .st-active { background: var(--accent-soft); color: var(--accent); }
+  .st-done { background: var(--good-soft); color: var(--good); }
+  .st-late { background: var(--over-soft); color: var(--over); }
+
+  .work-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; box-shadow: 0 0 0 0 var(--accent); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+  .now-card { background: linear-gradient(180deg, var(--accent-soft), transparent); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-radius: 12px; padding: 16px; margin: 14px 0 4px; }
+  .now-card.idle { background: var(--surface-2); border: 1px dashed var(--line); text-align: center; color: var(--faint); font-size: 13px; }
+  .now-head { display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  .now-title { font-size: 15px; font-weight: 620; letter-spacing: -.01em; margin: 9px 0 12px; }
+  .clock-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .clock-big { font-family: var(--mono); font-size: 30px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .clock-big.over { color: var(--over); }
+  .clock-budget { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .now-track { height: 7px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; margin-top: 12px; }
+  .now-fill { height: 100%; background: var(--accent); transition: width .9s linear; }
+  .now-fill.over { background: var(--over); }
+
+  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .abtn { font-family: var(--sans); font-size: 12px; font-weight: 550; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 5px 10px; border-radius: 7px; transition: .15s; display: inline-flex; align-items: center; gap: 5px; }
+  .abtn:hover { border-color: var(--accent); color: var(--accent); }
+  .abtn.go { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .abtn.go:hover { color: #fff; filter: brightness(1.07); }
+  .abtn.danger:hover { border-color: var(--over); color: var(--over); }
+  .task-card { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); padding: 12px 13px; margin-bottom: 8px; }
+  .task-card .tc-top { display: flex; align-items: center; gap: 10px; }
+  .task-card .tc-name { font-size: 13.5px; font-weight: 540; }
+  .task-card .tc-hrs { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .task-card .tc-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .actual { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .actual.over { color: var(--busy); }
+  .reason { font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--over); border-radius: 7px; padding: 7px 10px; margin-top: 9px; }
+  .reason b { color: var(--over); font-weight: 600; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+  .late-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .late-form textarea { font-family: var(--sans); font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; resize: vertical; min-height: 58px; width: 100%; }
+  .late-form textarea:focus { outline: 2px solid var(--over); border-color: var(--over); }
+  .late-form .lf-row { display: flex; gap: 7px; }
+  .hr-work { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--accent); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .hr-work .hw-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .done-flag { font-family: var(--mono); font-size: 11px; color: var(--good); display: inline-flex; align-items: center; gap: 4px; }
+
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(30px);
+    background: var(--ink); color: var(--bg); padding: 11px 18px; border-radius: 10px; font-size: 13px;
+    font-weight: 520; z-index: 80; opacity: 0; transition: .3s; box-shadow: var(--shadow); pointer-events: none;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 820px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .two-col { grid-template-columns: 1fr; }
+    .ledger-wrap { grid-template-columns: 1fr; }
+    .propose-card { position: static; }
+    .brand p { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="app">
+  <div class="bar">
+    <div class="brand">
+      <div class="glyph">⛓</div>
+      <div>
+        <h1>Quorum</h1>
+        <p>Consensus task-hour ledger</p>
+      </div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-view="hr" aria-selected="true"><span class="dot">▦</span> HR Dashboard</button>
+      <button class="tab" role="tab" data-view="emp" aria-selected="false"><span class="dot">◔</span> Employee</button>
+      <button class="tab" role="tab" data-view="ledger" aria-selected="false"><span class="dot">⛓</span> Task Ledger</button>
+    </div>
+    <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </div>
+
+  <main>
+    <!-- ============ HR VIEW ============ -->
+    <section class="view on" id="view-hr">
+      <div class="head">
+        <p class="eyebrow">Today · Manager view</p>
+        <h2>Team availability</h2>
+        <p>Availability is computed from sealed task hours against each person's daily capacity — no one sets their own status. Open a card to review the day and assign work.</p>
+      </div>
+      <div class="stats" id="hrStats"></div>
+      <div class="grid" id="empGrid"></div>
+    </section>
+
+    <!-- ============ EMPLOYEE VIEW ============ -->
+    <section class="view" id="view-emp">
+      <div class="head">
+        <p class="eyebrow">Employee view</p>
+        <h2>Your day &amp; the vote</h2>
+        <p>You see the tasks assigned to you and your resulting load — you can't edit availability. What you <em>can</em> do is vote on proposed tasks and their hour costs before they're sealed to the ledger.</p>
+      </div>
+      <div class="who-switch" id="whoSwitch"></div>
+      <div class="two-col">
+        <div class="panel" id="empSelf"></div>
+        <div class="panel">
+          <h3>Consensus queue</h3>
+          <p class="sub">New tasks need a majority of the team to agree on the hour cost before they can be assigned to anyone.</p>
+          <div id="empProposals"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ LEDGER VIEW ============ -->
+    <section class="view" id="view-ledger">
+      <div class="head">
+        <p class="eyebrow">Immutable record</p>
+        <h2>The task ledger</h2>
+        <p>Every agreed task is a sealed block: its hour cost, who voted for it, and a hash chaining it to the block before. Once sealed, the cost can't be quietly changed.</p>
+      </div>
+      <div class="ledger-wrap">
+        <div class="propose-card">
+          <h3>Propose a task</h3>
+          <p class="sub">Opens a vote in the consensus queue. It's assignable only after quorum seals it.</p>
+          <div class="field">
+            <label for="pTitle">Task name</label>
+            <input type="text" id="pTitle" placeholder="e.g. Client onboarding call" maxlength="46">
+          </div>
+          <div class="field">
+            <label for="pHours">Proposed hours</label>
+            <input type="number" id="pHours" placeholder="2" min="0.5" max="8" step="0.5">
+          </div>
+          <button class="btn wide" id="proposeBtn">Open for consensus</button>
+          <div class="locked-note">⚿ Quorum: majority of <span id="teamSize"></span> employees</div>
+        </div>
+        <div class="chain" id="chain"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Drawer -->
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <header>
+      <div class="avatar" id="dAvatar"></div>
+      <div>
+        <div class="name-lg" id="dName"></div>
+        <div class="role-lg" id="dRole"></div>
+      </div>
+      <button class="icon-btn x" id="drawerClose" aria-label="Close">✕</button>
+    </header>
+    <div class="body" id="drawerBody"></div>
+  </aside>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Seeded state ----------
+  const COLORS = ["#3B45D6", "#1F9D6B", "#E0912F", "#C0468A", "#2C8FBF", "#7A5AD6", "#D64550"];
+  const CAP = 8; // daily capacity hours per person
+
+  const employees = [
+    { id: "e1", name: "Amara Osei", role: "Support Lead", c: COLORS[0] },
+    { id: "e2", name: "Ben Carter", role: "Onboarding", c: COLORS[1] },
+    { id: "e3", name: "Priya Nair", role: "QA Analyst", c: COLORS[3] },
+    { id: "e4", name: "Diego Ramos", role: "Support", c: COLORS[4] },
+    { id: "e5", name: "Lena Fischer", role: "Data Ops", c: COLORS[5] },
+  ];
+
+  // Sealed task catalog (each ties to a block). hours are consensus-locked.
+  const catalog = [
+    { id: "t1", title: "Support queue (AM)", hours: 3 },
+    { id: "t2", title: "Client onboarding call", hours: 2 },
+    { id: "t3", title: "QA regression pass", hours: 4 },
+    { id: "t4", title: "Weekly data export", hours: 1.5 },
+    { id: "t5", title: "Standup + planning", hours: 1 },
+    { id: "t6", title: "Ticket triage (PM)", hours: 2.5 },
+  ];
+
+  // assignments for "today": map employeeId -> [{tid,state,started,elapsed,actualH,reason}]
+  // state: "todo" | "active" | "done" | "late". started = ms epoch when timer began.
+  const A = (tid, extra) => Object.assign({ tid, state: "todo", started: null, elapsed: 0, actualH: null, reason: "" }, extra);
+  const assigned = {
+    // Amara is already working on the support queue — seeded 42 min in so the clock ticks on load.
+    e1: [A("t5", { state: "done", actualH: 1 }), A("t1", { state: "active", started: Date.now() - 42 * 60000 })],
+    e2: [A("t5", { state: "done", actualH: 1.2 }), A("t2")],
+    e3: [A("t3")],
+    e4: [A("t5", { state: "done", actualH: 0.8 }), A("t6")],
+    e5: [A("t4", { state: "late", actualH: 2.5, reason: "Upstream export API was down for ~40 min; retried until it cleared." }), A("t5", { state: "done", actualH: 1 }), A("t2")],
+  };
+  let lateFor = null; // {eid,tid} while a late-reason form is open in the employee view
+
+  const proposals = []; // {id,title,hours,proposer,votes:[eid]}
+  let proposalSeq = 1;
+
+  // ---------- Blockchain ----------
+  function fnv(str) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    let hex = h.toString(16).padStart(8, "0");
+    // widen to 16 chars for a plausible-looking hash
+    let h2 = Math.imul(h ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
+    return hex + h2.toString(16).padStart(8, "0");
+  }
+
+  const chain = [{
+    index: 0, title: "Genesis — ledger opened", hours: 0, voters: [],
+    prevHash: "0000000000000000", time: "2026-08-01 09:00",
+    hash: fnv("genesis|quorum")
+  }];
+  // Seed the catalog as already-sealed blocks
+  catalog.forEach((t, i) => {
+    const prev = chain[chain.length - 1].hash;
+    chain.push({
+      index: chain.length, title: t.title, hours: t.hours,
+      voters: employees.slice(0, 3 + (i % 3)).map(e => e.id),
+      prevHash: prev, time: "2026-08-0" + (1 + (i % 5)) + " " + (9 + i) + ":00",
+      hash: fnv(t.title + "|" + t.hours + "|" + prev)
+    });
+    t.block = chain.length - 1;
+  });
+
+  function quorumNeeded() { return Math.floor(employees.length / 2) + 1; } // majority = 3 of 5
+
+  // ---------- Helpers ----------
+  const $ = s => document.querySelector(s);
+  const initials = n => n.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const taskById = id => catalog.find(t => t.id === id);
+  const empById = id => employees.find(e => e.id === id);
+  const fmtH = h => (Number.isInteger(h) ? h : (Math.round(h * 10) / 10).toFixed(1)) + "h";
+  const rowsOf = eid => (assigned[eid] || (assigned[eid] = []));
+  const findA = (eid, tid) => rowsOf(eid).find(a => a.tid === tid);
+  const budgetH = a => taskById(a.tid)?.hours || 0;
+  const isDone = a => a.state === "done" || a.state === "late";
+  const activeOf = eid => rowsOf(eid).find(a => a.state === "active");
+  const scheduledLoad = eid => rowsOf(eid).reduce((s, a) => s + budgetH(a), 0);
+  const remainingLoad = eid => rowsOf(eid).reduce((s, a) => s + (isDone(a) ? 0 : budgetH(a)), 0);
+  const doneCount = eid => rowsOf(eid).filter(isDone).length;
+
+  // live elapsed in ms for a task (adds the running segment for active tasks)
+  const elapsedMs = a => (a.elapsed || 0) + (a.state === "active" && a.started ? Date.now() - a.started : 0);
+  function fmtClock(ms) {
+    const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+    return h + ":" + String(m).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  }
+
+  // status is based on REMAINING load — how committed they are for the rest of the day
+  function status(load) {
+    const r = load / CAP;
+    if (load === 0) return { key: "free", label: "Available", cls: "free" };
+    if (r > 1) return { key: "over", label: "Overloaded", cls: "over" };
+    if (r > 0.85) return { key: "busy", label: "Full", cls: "busy" };
+    return { key: "free", label: "Has room", cls: "free" };
+  }
+
+  let currentEmp = null;   // drawer target (HR)
+  let selfEmp = "e1";      // employee view identity
+
+  // ---------- Toast ----------
+  let toastT;
+  function toast(msg) {
+    const el = $("#toast");
+    el.innerHTML = msg;
+    el.classList.add("on");
+    clearTimeout(toastT);
+    toastT = setTimeout(() => el.classList.remove("on"), 2600);
+  }
+
+  // ---------- HR render ----------
+  function renderHR() {
+    const totalCap = employees.length * CAP;
+    let remainTeam = 0, over = 0, working = 0;
+    employees.forEach(e => {
+      remainTeam += remainingLoad(e.id);
+      if (remainingLoad(e.id) > CAP) over++;
+      if (activeOf(e.id)) working++;
+    });
+    $("#hrStats").innerHTML = `
+      <div class="stat"><div class="k">Team capacity</div><div class="v">${totalCap}<small>h</small></div></div>
+      <div class="stat"><div class="k">Remaining today</div><div class="v">${(remainTeam % 1 ? remainTeam.toFixed(1) : remainTeam)}<small>h</small></div></div>
+      <div class="stat"><div class="k">Working now</div><div class="v" style="color:${working ? 'var(--accent)' : 'var(--ink)'}">${working}</div></div>
+      <div class="stat"><div class="k">Overloaded</div><div class="v" style="color:${over ? 'var(--over)' : 'var(--ink)'}">${over}</div></div>`;
+
+    $("#empGrid").innerHTML = employees.map(e => {
+      const remain = remainingLoad(e.id), st = status(remain);
+      const pct = Math.min(100, (remain / CAP) * 100);
+      const total = rowsOf(e.id).length, done = doneCount(e.id);
+      const act = activeOf(e.id);
+      const workLine = act
+        ? `<div class="hr-work"><span class="work-dot"></span><span class="mono" data-clock="${e.id}|${act.tid}">${fmtClock(elapsedMs(act))}</span><span class="hw-name">· ${taskById(act.tid).title}</span></div>`
+        : (done === total && total > 0
+          ? `<div class="done-flag">✓ all tasks complete</div>`
+          : `<div class="mini-tasks"><span class="chip-count">${total - done}</span> ${total - done === 1 ? 'task' : 'tasks'} left${done ? ` · <span style="color:var(--good)">${done} done</span>` : ''}</div>`);
+      return `
+      <button class="card" data-emp="${e.id}">
+        <div class="who">
+          <div class="avatar" style="background:${e.c}">${initials(e.name)}</div>
+          <div>
+            <div class="name">${e.name}</div>
+            <div class="role">${e.role}</div>
+          </div>
+        </div>
+        <div class="load">
+          <div class="load-top">
+            <span class="hrs"><b>${fmtH(remain)}</b> <span style="color:var(--faint)">left / ${CAP}h</span></span>
+            <span class="pill ${st.cls}">${st.label}</span>
+          </div>
+          <div class="track"><div class="fill ${st.cls}" style="width:${pct}%"></div></div>
+          <div class="cap-note">${remain > CAP ? '+' + fmtH(remain - CAP) + ' over capacity' : fmtH(CAP - remain) + ' free to assign'}</div>
+        </div>
+        ${workLine}
+      </button>`;
+    }).join("");
+  }
+
+  // ---------- Drawer (HR assign) ----------
+  function openDrawer(eid) {
+    currentEmp = eid;
+    renderDrawer();
+    $("#scrim").classList.add("on");
+    $("#drawer").classList.add("on");
+    $("#drawer").setAttribute("aria-hidden", "false");
+  }
+  function closeDrawer() {
+    $("#scrim").classList.remove("on");
+    $("#drawer").classList.remove("on");
+    $("#drawer").setAttribute("aria-hidden", "true");
+    currentEmp = null;
+  }
+  const STATE_PILL = { todo: ["st-todo", "To do"], active: ["st-active", "● Working"], done: ["st-done", "✓ Done"], late: ["st-late", "⚑ Late"] };
+
+  function renderDrawer() {
+    const e = empById(currentEmp);
+    const remain = remainingLoad(e.id), st = status(remain), pct = Math.min(100, remain / CAP * 100);
+    $("#dAvatar").style.background = e.c;
+    $("#dAvatar").textContent = initials(e.name);
+    $("#dName").textContent = e.name;
+    $("#dRole").textContent = e.role;
+
+    const rows = rowsOf(e.id);
+    const taskRows = rows.length ? rows.map(a => {
+      const t = taskById(a.tid), [cls, lbl] = STATE_PILL[a.state];
+      const over = a.actualH != null && a.actualH > t.hours;
+      const actual = a.state === "active"
+        ? `<span class="actual" data-clock="${e.id}|${a.tid}">${fmtClock(elapsedMs(a))}</span> <span class="actual">so far</span>`
+        : a.actualH != null ? `<span class="actual ${over ? 'over' : ''}">${fmtH(a.actualH)} actual</span>` : "";
+      return `<div class="task-card">
+        <div class="tc-top">
+          <span class="t-verified" title="Consensus-sealed" style="color:var(--good)">⛓</span>
+          <span class="tc-name">${t.title}</span>
+          <span class="tc-hrs">${fmtH(t.hours)}</span>
+          ${isDone(a) ? "" : `<button class="rm" data-rm="${a.tid}" aria-label="Remove">✕</button>`}
+        </div>
+        <div class="tc-meta"><span class="st ${cls}">${lbl}</span> ${actual}</div>
+        ${a.reason ? `<div class="reason"><b>Reason</b><br>${escapeHtml(a.reason)}</div>` : ""}
+      </div>`;
+    }).join("") : `<div class="empty">No tasks today — fully available.</div>`;
+
+    const assignedIds = rows.map(a => a.tid);
+    const avail = catalog.filter(t => !assignedIds.includes(t.id));
+    const options = avail.map(t => `<option value="${t.id}">${t.title} · ${fmtH(t.hours)}</option>`).join("");
+    const wouldWarn = remain >= CAP;
+    $("#drawerBody").innerHTML = `
+      <div>
+        <div class="section-label"><span>Remaining load</span><span>${fmtH(remain)} / ${CAP}h</span></div>
+        <div class="track" style="height:10px"><div class="fill ${st.cls}" style="width:${pct}%"></div></div>
+        <div class="cap-note" style="margin-top:8px">${remain > CAP ? '⚠ ' + fmtH(remain - CAP) + ' over capacity' : fmtH(CAP - remain) + ' free to assign'} · ${doneCount(e.id)}/${rows.length} done</div>
+      </div>
+      <div>
+        <div class="section-label"><span>Tasks today</span><span>${rows.length}</span></div>
+        ${taskRows}
+      </div>
+      <div class="assign-box">
+        <div class="section-label" style="color:var(--accent)"><span>Assign a sealed task</span></div>
+        ${avail.length ? `
+          <select id="assignSel">${options}</select>
+          <button class="btn wide" id="assignBtn" style="margin-top:10px">＋ Assign to ${e.name.split(" ")[0]}</button>
+          ${wouldWarn ? `<div class="warn-note">Already at/over capacity for the rest of today.</div>` : ``}
+        ` : `<div class="empty" style="border:0;padding:6px">Every sealed task is already on their plate.</div>`}
+      </div>`;
+  }
+
+  // ---------- Employee view ----------
+  function renderEmp() {
+    $("#whoSwitch").innerHTML = employees.map(e => `
+      <button class="who-chip" data-self="${e.id}" aria-pressed="${e.id === selfEmp}">
+        <span class="av-sm" style="background:${e.c}">${initials(e.name)}</span>${e.name.split(" ")[0]}
+      </button>`).join("");
+
+    const e = empById(selfEmp);
+    const remain = remainingLoad(e.id), st = status(remain), pct = Math.round(remain / CAP * 100);
+    const rows = rowsOf(e.id), act = activeOf(e.id);
+    const accent = st.cls === 'over' ? 'var(--over)' : st.cls === 'busy' ? 'var(--busy)' : 'var(--good)';
+
+    // "Now working" card (live)
+    let nowCard;
+    if (act) {
+      const t = taskById(act.tid), budMs = t.hours * 3600000, el = elapsedMs(act);
+      const ppct = Math.min(100, el / budMs * 100), over = el > budMs;
+      nowCard = `<div class="now-card">
+        <div class="now-head"><span class="work-dot"></span> Now working</div>
+        <div class="now-title">${t.title}</div>
+        <div class="clock-row">
+          <span class="clock-big ${over ? 'over' : ''}" data-clock="${e.id}|${act.tid}">${fmtClock(el)}</span>
+          <span class="clock-budget">budget ${fmtH(t.hours)}</span>
+        </div>
+        <div class="now-track"><div class="now-fill ${over ? 'over' : ''}" data-prog="${e.id}|${act.tid}" style="width:${ppct}%"></div></div>
+      </div>`;
+    } else {
+      nowCard = `<div class="now-card idle">Not working on anything right now — hit <b>Start</b> on a task below to run the clock.</div>`;
+    }
+
+    const taskRows = rows.length ? rows.map(a => {
+      const t = taskById(a.tid), [cls, lbl] = STATE_PILL[a.state];
+      const openLate = lateFor && lateFor.eid === e.id && lateFor.tid === a.tid;
+      let meta = `<span class="st ${cls}">${lbl}</span>`;
+      if (a.state === "active") meta += ` <span class="actual" data-clock="${e.id}|${a.tid}">${fmtClock(elapsedMs(a))}</span>`;
+      else if (a.actualH != null) { const ov = a.actualH > t.hours; meta += ` <span class="actual ${ov ? 'over' : ''}">${fmtH(a.actualH)} actual</span>`; }
+
+      let actions = "";
+      if (!isDone(a)) {
+        actions = `<div class="row-actions">
+          ${a.state === "active"
+            ? `<span class="hr-work"><span class="work-dot"></span>running</span>`
+            : `<button class="abtn go" data-start="${a.tid}">▶ Start</button>`}
+          <button class="abtn" data-done="${a.tid}">✓ Complete</button>
+          <button class="abtn danger" data-late="${a.tid}">⚑ Late</button>
+        </div>`;
+      }
+      const lateForm = openLate ? `<div class="late-form">
+        <textarea id="lateReason" placeholder="What held this task up? (visible to HR)"></textarea>
+        <div class="lf-row">
+          <button class="abtn go" data-lateok="${a.tid}">Submit as late</button>
+          <button class="abtn" data-latecancel="1">Cancel</button>
+        </div>
+      </div>` : "";
+      return `<div class="task-card">
+        <div class="tc-top">
+          <span class="t-verified" style="color:var(--good)">⛓</span>
+          <span class="tc-name">${t.title}</span>
+          <span class="tc-hrs">${fmtH(t.hours)}</span>
+          ${actions}
+        </div>
+        <div class="tc-meta">${meta}</div>
+        ${a.reason ? `<div class="reason"><b>Your reason</b><br>${escapeHtml(a.reason)}</div>` : ""}
+        ${lateForm}
+      </div>`;
+    }).join("") : `<div class="empty">Nothing assigned yet today.</div>`;
+
+    $("#empSelf").innerHTML = `
+      <h3>${e.name}</h3>
+      <p class="sub">${e.role} · capacity ${CAP}h/day</p>
+      <div class="big-load">
+        <div class="pct" style="color:${accent}">${pct}%</div>
+        <div class="lbl">${fmtH(remain)} of ${CAP}h still to do · <span style="color:${accent}">${st.label}</span></div>
+      </div>
+      <div class="track" style="height:10px;margin:6px 0 4px"><div class="fill ${st.cls}" style="width:${Math.min(100,pct)}%"></div></div>
+      ${nowCard}
+      <div class="section-label" style="margin-top:18px"><span>Your tasks today</span><span>${doneCount(e.id)}/${rows.length} done</span></div>
+      ${taskRows}
+      <div class="locked-note">⚿ Your availability is derived from these hours — you can't set it by hand.</div>`;
+
+    renderProposals("#empProposals", true);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
+  // ---------- Proposals ----------
+  function renderProposals(sel, votable) {
+    const host = $(sel);
+    if (!proposals.length) {
+      host.innerHTML = `<div class="empty">No open proposals. Add one from the Task Ledger tab.</div>`;
+      return;
+    }
+    const need = quorumNeeded();
+    host.innerHTML = proposals.map(p => {
+      const count = p.votes.length;
+      const reached = count >= need;
+      const qpct = Math.min(100, count / need * 100);
+      const iVoted = p.votes.includes(selfEmp);
+      const avs = p.votes.map(id => {
+        const e = empById(id);
+        return `<span class="va" style="background:${e.c}" title="${e.name}">${initials(e.name)}</span>`;
+      }).join("");
+      return `<div class="prop">
+        <div class="p-top">
+          <div>
+            <div class="p-title">${p.title}</div>
+            <div class="p-meta">proposed by ${p.proposer}</div>
+          </div>
+          <div class="p-hrs">${fmtH(p.hours)}</div>
+        </div>
+        <div class="votes">
+          <div class="quorum-bar"><div class="quorum-fill" style="width:${qpct}%;background:${reached ? 'var(--good)' : 'var(--accent)'}"></div></div>
+          <span class="vc">${count}/${need} to seal</span>
+        </div>
+        ${avs ? `<div class="voter-avs">${avs}</div>` : ``}
+        <div class="p-actions">
+          ${votable ? `<button class="btn sm ${iVoted ? 'ghost' : ''}" data-vote="${p.id}">${iVoted ? '✓ You agreed' : 'Agree on ' + fmtH(p.hours)}</button>` : ``}
+          ${reached ? `<button class="btn sm" data-seal="${p.id}">⛓ Seal to ledger</button>` : `<span class="vc" style="align-self:center">needs ${need - count} more</span>`}
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  // ---------- Ledger ----------
+  function renderChain() {
+    $("#teamSize").textContent = employees.length;
+    const blocks = [...chain].reverse();
+    $("#chain").innerHTML = blocks.map((b, i) => {
+      const isGen = b.index === 0;
+      const voterAvs = b.voters.map(id => {
+        const e = empById(id); if (!e) return "";
+        return `<span class="va" style="background:${e.c}">${initials(e.name)}</span>`;
+      }).join("");
+      const block = `
+        <div class="block ${isGen ? 'genesis' : ''}">
+          <div class="b-head">
+            <div class="b-index">${b.index}</div>
+            <div>
+              <div class="b-title">${b.title}</div>
+              <div class="b-sub">sealed ${b.time}</div>
+            </div>
+            ${isGen ? '' : `<div class="b-hrs">${fmtH(b.hours)}</div>`}
+          </div>
+          <div class="hashes">
+            <div><span class="hk">hash</span><span class="hv">${b.hash}</span></div>
+            <div><span class="hk">prev</span><span class="hv prev">${b.prevHash}</span></div>
+          </div>
+          ${b.voters.length ? `<div class="b-votes">agreed by <span class="voter-avs" style="display:inline-flex;margin-left:4px">${voterAvs}</span></div>` : ''}
+        </div>`;
+      const link = i < blocks.length - 1 ? `<div class="link"></div>` : "";
+      return block + link;
+    }).join("");
+  }
+
+  // ---------- Actions ----------
+  function assignTask(eid, tid) {
+    if (!findA(eid, tid)) rowsOf(eid).push(A(tid));
+    renderHR(); renderDrawer();
+    toast(`Assigned <b>${taskById(tid).title}</b> to ${empById(eid).name.split(" ")[0]}`);
+  }
+  function removeTask(eid, tid) {
+    assigned[eid] = rowsOf(eid).filter(a => a.tid !== tid);
+    renderHR(); renderDrawer();
+  }
+
+  // ----- Employee task lifecycle -----
+  function startTask(eid, tid) {
+    const cur = activeOf(eid);
+    if (cur && cur.tid !== tid) { cur.elapsed = elapsedMs(cur); cur.started = null; cur.state = "todo"; } // pause the other
+    const a = findA(eid, tid);
+    a.state = "active"; a.started = Date.now();
+    lateFor = null; renderEmp(); renderHR();
+  }
+  function completeTask(eid, tid, late, reason) {
+    const a = findA(eid, tid), t = taskById(tid);
+    const ms = elapsedMs(a);
+    a.elapsed = ms; a.started = null;
+    a.actualH = ms > 0 ? Math.max(0.1, Math.round(ms / 3600000 * 10) / 10) : t.hours; // never-run tasks count as budgeted
+    a.state = late ? "late" : "done";
+    a.reason = late ? reason : "";
+    lateFor = null; renderEmp(); renderHR();
+    toast(late ? `⚑ <b>${t.title}</b> marked late` : `✓ <b>${t.title}</b> completed`);
+  }
+
+  // ----- Live clock: update only timer nodes, never rebuild structure (keeps inputs focused) -----
+  function tick() {
+    document.querySelectorAll("[data-clock]").forEach(el => {
+      const [eid, tid] = el.dataset.clock.split("|");
+      const a = findA(eid, tid);
+      if (a && a.state === "active") el.textContent = fmtClock(elapsedMs(a));
+    });
+    document.querySelectorAll("[data-prog]").forEach(el => {
+      const [eid, tid] = el.dataset.prog.split("|");
+      const a = findA(eid, tid);
+      if (a && a.state === "active") el.style.width = Math.min(100, elapsedMs(a) / (budgetH(a) * 3600000) * 100) + "%";
+    });
+  }
+  function addProposal(title, hours) {
+    proposals.push({ id: "p" + (proposalSeq++), title, hours, proposer: empById(selfEmp).name.split(" ")[0], votes: [selfEmp] });
+    toast(`Proposal opened — <b>${title}</b> · needs ${quorumNeeded()} to agree`);
+  }
+  function toggleVote(pid) {
+    const p = proposals.find(x => x.id === pid); if (!p) return;
+    const i = p.votes.indexOf(selfEmp);
+    if (i >= 0) p.votes.splice(i, 1); else p.votes.push(selfEmp);
+    renderEmp();
+  }
+  function sealProposal(pid) {
+    const idx = proposals.findIndex(x => x.id === pid);
+    if (idx < 0) return;
+    const p = proposals[idx];
+    const prev = chain[chain.length - 1].hash;
+    const now = "2026-08-07 " + new Date().toTimeString().slice(0, 5);
+    chain.push({
+      index: chain.length, title: p.title, hours: p.hours, voters: [...p.votes],
+      prevHash: prev, time: now, hash: fnv(p.title + "|" + p.hours + "|" + prev + "|" + p.votes.join(","))
+    });
+    const newT = { id: "t" + (catalog.length + 1) + "_" + Date.now(), title: p.title, hours: p.hours, block: chain.length - 1 };
+    catalog.push(newT);
+    proposals.splice(idx, 1);
+    renderChain(); renderEmp(); renderHR();
+    toast(`⛓ <b>${p.title}</b> sealed — now assignable`);
+  }
+
+  // ---------- Wiring ----------
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => {
+      const v = t.dataset.view;
+      document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
+      document.querySelectorAll(".view").forEach(x => x.classList.remove("on"));
+      $("#view-" + v).classList.add("on");
+      if (v === "emp") renderEmp();
+      if (v === "ledger") renderChain();
+      if (v === "hr") renderHR();
+    });
+  });
+
+  $("#empGrid").addEventListener("click", e => {
+    const c = e.target.closest("[data-emp]");
+    if (c) openDrawer(c.dataset.emp);
+  });
+  $("#drawerClose").addEventListener("click", closeDrawer);
+  $("#scrim").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+  $("#drawerBody").addEventListener("click", e => {
+    const a = e.target.closest("#assignBtn");
+    if (a) { assignTask(currentEmp, $("#assignSel").value); return; }
+    const r = e.target.closest("[data-rm]");
+    if (r) removeTask(currentEmp, r.dataset.rm);
+  });
+
+  $("#whoSwitch").addEventListener("click", e => {
+    const c = e.target.closest("[data-self]");
+    if (c) { selfEmp = c.dataset.self; lateFor = null; renderEmp(); }
+  });
+  $("#empSelf").addEventListener("click", e => {
+    const t = e.target;
+    let b;
+    if (b = t.closest("[data-start]")) return startTask(selfEmp, b.dataset.start);
+    if (b = t.closest("[data-done]")) return completeTask(selfEmp, b.dataset.done, false);
+    if (b = t.closest("[data-late]")) { lateFor = { eid: selfEmp, tid: b.dataset.late }; renderEmp(); $("#lateReason") && $("#lateReason").focus(); return; }
+    if (b = t.closest("[data-latecancel]")) { lateFor = null; return renderEmp(); }
+    if (b = t.closest("[data-lateok]")) {
+      const r = ($("#lateReason").value || "").trim();
+      if (!r) { toast("Add a short reason so HR has context."); $("#lateReason").focus(); return; }
+      return completeTask(selfEmp, b.dataset.lateok, true, r);
+    }
+  });
+  $("#empProposals").addEventListener("click", e => {
+    const v = e.target.closest("[data-vote]");
+    if (v) { toggleVote(v.dataset.vote); return; }
+    const s = e.target.closest("[data-seal]");
+    if (s) sealProposal(s.dataset.seal);
+  });
+
+  $("#proposeBtn").addEventListener("click", () => {
+    const title = $("#pTitle").value.trim();
+    const hours = parseFloat($("#pHours").value);
+    if (!title) { toast("Give the task a name first."); $("#pTitle").focus(); return; }
+    if (!hours || hours <= 0) { toast("Set a valid hour cost."); $("#pHours").focus(); return; }
+    addProposal(title, Math.min(8, hours));
+    $("#pTitle").value = ""; $("#pHours").value = "";
+    toast(`Proposal opened — check the Employee tab to vote`);
+  });
+
+  // Theme toggle
+  const root = document.documentElement;
+  $("#themeBtn").addEventListener("click", () => {
+    const cur = root.getAttribute("data-theme")
+      || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    root.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+  });
+
+  // ---------- Boot ----------
+  renderHR();
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
