@@ -283,8 +283,23 @@
   .st { font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
   .st-todo { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
   .st-active { background: var(--accent-soft); color: var(--accent); }
+  .st-paused { background: var(--busy-soft); color: var(--busy); }
   .st-done { background: var(--good-soft); color: var(--good); }
   .st-late { background: var(--over-soft); color: var(--over); }
+
+  /* HR status filter */
+  .filterbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+  .fbtn { border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-family: var(--sans); font-size: 12.5px; font-weight: 550; padding: 7px 12px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; transition: .15s; }
+  .fbtn:hover { color: var(--ink); border-color: var(--accent); }
+  .fbtn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .fbtn .fcount { font-family: var(--mono); font-size: 11px; background: var(--surface-2); padding: 0 6px; border-radius: 5px; font-variant-numeric: tabular-nums; }
+  .fbtn[aria-pressed="true"] .fcount { background: var(--surface); }
+
+  /* Employee day summary */
+  .mini-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 4px; }
+  .mini-stats > div { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; text-align: center; }
+  .mini-stats .ms-v { display: block; font-family: var(--mono); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .mini-stats .ms-k { display: block; font-size: 11px; color: var(--faint); margin-top: 2px; }
 
   .work-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; box-shadow: 0 0 0 0 var(--accent); animation: pulse 1.6s infinite; }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
@@ -370,6 +385,7 @@
         <p>Availability is computed from sealed task hours against each person's daily capacity — no one sets their own status. Open a card to review the day and assign work.</p>
       </div>
       <div class="stats" id="hrStats"></div>
+      <div class="filterbar" id="hrFilterBar"></div>
       <div class="grid" id="empGrid"></div>
     </section>
 
@@ -464,9 +480,11 @@
   // assignments for "today": map employeeId -> [{tid,state,started,elapsed,actualH,reason}]
   // state: "todo" | "active" | "done" | "late". started = ms epoch when timer began.
   const A = (tid, extra) => Object.assign({ tid, state: "todo", started: null, elapsed: 0, actualH: null, reason: "" }, extra);
+  const MIN = 60000;
+  // Standardized morning state — no timer auto-runs. Statuses: standup done for the team,
+  // Amara has one task paused mid-way (demo Resume), Lena has a late task with a reason.
   const assigned = {
-    // Amara is already working on the support queue — seeded 42 min in so the clock ticks on load.
-    e1: [A("t5", { state: "done", actualH: 1 }), A("t1", { state: "active", started: Date.now() - 42 * 60000 })],
+    e1: [A("t5", { state: "done", actualH: 1 }), A("t1", { state: "paused", elapsed: 25 * MIN })],
     e2: [A("t5", { state: "done", actualH: 1.2 }), A("t2")],
     e3: [A("t3")],
     e4: [A("t5", { state: "done", actualH: 0.8 }), A("t6")],
@@ -522,7 +540,14 @@
   const activeOf = eid => rowsOf(eid).find(a => a.state === "active");
   const scheduledLoad = eid => rowsOf(eid).reduce((s, a) => s + budgetH(a), 0);
   const remainingLoad = eid => rowsOf(eid).reduce((s, a) => s + (isDone(a) ? 0 : budgetH(a)), 0);
+  const doneBudget = eid => rowsOf(eid).reduce((s, a) => s + (isDone(a) ? budgetH(a) : 0), 0);
   const doneCount = eid => rowsOf(eid).filter(isDone).length;
+  // actual time spent today: recorded actuals for finished tasks + live/paused elapsed for the rest
+  const workedH = eid => rowsOf(eid).reduce((s, a) => {
+    if (isDone(a)) return s + (a.actualH || 0);
+    if (a.state === "active" || a.state === "paused") return s + elapsedMs(a) / 3600000;
+    return s;
+  }, 0);
 
   // live elapsed in ms for a task (adds the running segment for active tasks)
   const elapsedMs = a => (a.elapsed || 0) + (a.state === "active" && a.started ? Date.now() - a.started : 0);
@@ -542,6 +567,15 @@
 
   let currentEmp = null;   // drawer target (HR)
   let selfEmp = "e1";      // employee view identity
+  let hrFilter = "all";    // HR dashboard status filter
+
+  // HR status-filter predicates
+  const FILTERS = [
+    ["all", "All", () => true],
+    ["working", "Working now", eid => !!activeOf(eid)],
+    ["room", "Has room", eid => remainingLoad(eid) < CAP],
+    ["over", "Overloaded", eid => remainingLoad(eid) > CAP],
+  ];
 
   // ---------- Toast ----------
   let toastT;
@@ -568,7 +602,14 @@
       <div class="stat"><div class="k">Working now</div><div class="v" style="color:${working ? 'var(--accent)' : 'var(--ink)'}">${working}</div></div>
       <div class="stat"><div class="k">Overloaded</div><div class="v" style="color:${over ? 'var(--over)' : 'var(--ink)'}">${over}</div></div>`;
 
-    $("#empGrid").innerHTML = employees.map(e => {
+    $("#hrFilterBar").innerHTML = FILTERS.map(([key, label, fn]) =>
+      `<button class="fbtn" data-fcat="${key}" aria-pressed="${hrFilter === key}">${label} <span class="fcount">${employees.filter(x => fn(x.id)).length}</span></button>`
+    ).join("");
+
+    const pred = (FILTERS.find(f => f[0] === hrFilter) || FILTERS[0])[2];
+    const shown = employees.filter(e => pred(e.id));
+    if (!shown.length) { $("#empGrid").innerHTML = `<div class="empty" style="grid-column:1/-1">No one matches this filter right now.</div>`; return; }
+    $("#empGrid").innerHTML = shown.map(e => {
       const remain = remainingLoad(e.id), st = status(remain);
       const pct = Math.min(100, (remain / CAP) * 100);
       const total = rowsOf(e.id).length, done = doneCount(e.id);
@@ -614,7 +655,7 @@
     $("#drawer").setAttribute("aria-hidden", "true");
     currentEmp = null;
   }
-  const STATE_PILL = { todo: ["st-todo", "To do"], active: ["st-active", "● Working"], done: ["st-done", "✓ Done"], late: ["st-late", "⚑ Late"] };
+  const STATE_PILL = { todo: ["st-todo", "To do"], active: ["st-active", "● Working"], paused: ["st-paused", "⏸ Paused"], done: ["st-done", "✓ Done"], late: ["st-late", "⚑ Late"] };
 
   function renderDrawer() {
     const e = empById(currentEmp);
@@ -630,6 +671,7 @@
       const over = a.actualH != null && a.actualH > t.hours;
       const actual = a.state === "active"
         ? `<span class="actual" data-clock="${e.id}|${a.tid}">${fmtClock(elapsedMs(a))}</span> <span class="actual">so far</span>`
+        : a.state === "paused" ? `<span class="actual">${fmtClock(elapsedMs(a))} logged · paused</span>`
         : a.actualH != null ? `<span class="actual ${over ? 'over' : ''}">${fmtH(a.actualH)} actual</span>` : "";
       return `<div class="task-card">
         <div class="tc-top">
@@ -651,7 +693,7 @@
       <div>
         <div class="section-label"><span>Remaining load</span><span>${fmtH(remain)} / ${CAP}h</span></div>
         <div class="track" style="height:10px"><div class="fill ${st.cls}" style="width:${pct}%"></div></div>
-        <div class="cap-note" style="margin-top:8px">${remain > CAP ? '⚠ ' + fmtH(remain - CAP) + ' over capacity' : fmtH(CAP - remain) + ' free to assign'} · ${doneCount(e.id)}/${rows.length} done</div>
+        <div class="cap-note" style="margin-top:8px">${remain > CAP ? '⚠ ' + fmtH(remain - CAP) + ' over capacity' : fmtH(CAP - remain) + ' free to assign'} · ${doneCount(e.id)}/${rows.length} done · ${fmtH(workedH(e.id))} logged</div>
       </div>
       <div>
         <div class="section-label"><span>Tasks today</span><span>${rows.length}</span></div>
@@ -675,9 +717,14 @@
       </button>`).join("");
 
     const e = empById(selfEmp);
-    const remain = remainingLoad(e.id), st = status(remain), pct = Math.round(remain / CAP * 100);
+    const remain = remainingLoad(e.id), st = status(remain);
     const rows = rowsOf(e.id), act = activeOf(e.id);
+    const sched = scheduledLoad(e.id), worked = workedH(e.id);
+    const compPct = sched ? Math.round(doneBudget(e.id) / sched * 100) : 0; // % of today's work done
+    const allDone = sched > 0 && remain === 0;
     const accent = st.cls === 'over' ? 'var(--over)' : st.cls === 'busy' ? 'var(--busy)' : 'var(--good)';
+    const bigColor = allDone ? 'var(--good)' : accent;
+    const bigLabel = allDone ? 'Day complete' : (sched === 0 ? 'No tasks yet' : st.label);
 
     // "Now working" card (live)
     let nowCard;
@@ -702,14 +749,17 @@
       const openLate = lateFor && lateFor.eid === e.id && lateFor.tid === a.tid;
       let meta = `<span class="st ${cls}">${lbl}</span>`;
       if (a.state === "active") meta += ` <span class="actual" data-clock="${e.id}|${a.tid}">${fmtClock(elapsedMs(a))}</span>`;
+      else if (a.state === "paused") meta += ` <span class="actual">${fmtClock(elapsedMs(a))} logged</span>`;
       else if (a.actualH != null) { const ov = a.actualH > t.hours; meta += ` <span class="actual ${ov ? 'over' : ''}">${fmtH(a.actualH)} actual</span>`; }
 
       let actions = "";
       if (!isDone(a)) {
+        let primary;
+        if (a.state === "active") primary = `<button class="abtn" data-pause="${a.tid}">⏸ Pause</button>`;
+        else if (a.state === "paused") primary = `<button class="abtn go" data-start="${a.tid}">▶ Resume</button>`;
+        else primary = `<button class="abtn go" data-start="${a.tid}">▶ Start</button>`;
         actions = `<div class="row-actions">
-          ${a.state === "active"
-            ? `<span class="hr-work"><span class="work-dot"></span>running</span>`
-            : `<button class="abtn go" data-start="${a.tid}">▶ Start</button>`}
+          ${primary}
           <button class="abtn" data-done="${a.tid}">✓ Complete</button>
           <button class="abtn danger" data-late="${a.tid}">⚑ Late</button>
         </div>`;
@@ -738,10 +788,15 @@
       <h3>${e.name}</h3>
       <p class="sub">${e.role} · capacity ${CAP}h/day</p>
       <div class="big-load">
-        <div class="pct" style="color:${accent}">${pct}%</div>
-        <div class="lbl">${fmtH(remain)} of ${CAP}h still to do · <span style="color:${accent}">${st.label}</span></div>
+        <div class="pct" style="color:${bigColor}">${compPct}%</div>
+        <div class="lbl">of today's work done · <span style="color:${bigColor}">${bigLabel}</span></div>
       </div>
-      <div class="track" style="height:10px;margin:6px 0 4px"><div class="fill ${st.cls}" style="width:${Math.min(100,pct)}%"></div></div>
+      <div class="track" style="height:10px;margin:6px 0 4px"><div class="fill" style="width:${compPct}%;background:${allDone ? 'var(--good)' : 'var(--accent)'}"></div></div>
+      <div class="mini-stats">
+        <div><span class="ms-v">${fmtH(worked)}</span><span class="ms-k">logged today</span></div>
+        <div><span class="ms-v">${doneCount(e.id)}/${rows.length}</span><span class="ms-k">tasks done</span></div>
+        <div><span class="ms-v">${fmtH(remain)}</span><span class="ms-k">left to do</span></div>
+      </div>
       ${nowCard}
       <div class="section-label" style="margin-top:18px"><span>Your tasks today</span><span>${doneCount(e.id)}/${rows.length} done</span></div>
       ${taskRows}
@@ -837,10 +892,16 @@
   // ----- Employee task lifecycle -----
   function startTask(eid, tid) {
     const cur = activeOf(eid);
-    if (cur && cur.tid !== tid) { cur.elapsed = elapsedMs(cur); cur.started = null; cur.state = "todo"; } // pause the other
+    if (cur && cur.tid !== tid) { cur.elapsed = elapsedMs(cur); cur.started = null; cur.state = "paused"; } // pause whatever was running
     const a = findA(eid, tid);
     a.state = "active"; a.started = Date.now();
     lateFor = null; renderEmp(); renderHR();
+  }
+  function pauseTask(eid, tid) {
+    const a = findA(eid, tid);
+    if (!a || a.state !== "active") return;
+    a.elapsed = elapsedMs(a); a.started = null; a.state = "paused";
+    renderEmp(); renderHR();
   }
   function completeTask(eid, tid, late, reason) {
     const a = findA(eid, tid), t = taskById(tid);
@@ -910,6 +971,10 @@
     const c = e.target.closest("[data-emp]");
     if (c) openDrawer(c.dataset.emp);
   });
+  $("#hrFilterBar").addEventListener("click", e => {
+    const b = e.target.closest("[data-fcat]");
+    if (b) { hrFilter = b.dataset.fcat; renderHR(); }
+  });
   $("#drawerClose").addEventListener("click", closeDrawer);
   $("#scrim").addEventListener("click", closeDrawer);
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
@@ -929,6 +994,7 @@
     const t = e.target;
     let b;
     if (b = t.closest("[data-start]")) return startTask(selfEmp, b.dataset.start);
+    if (b = t.closest("[data-pause]")) return pauseTask(selfEmp, b.dataset.pause);
     if (b = t.closest("[data-done]")) return completeTask(selfEmp, b.dataset.done, false);
     if (b = t.closest("[data-late]")) { lateFor = { eid: selfEmp, tid: b.dataset.late }; renderEmp(); $("#lateReason") && $("#lateReason").focus(); return; }
     if (b = t.closest("[data-latecancel]")) { lateFor = null; return renderEmp(); }
