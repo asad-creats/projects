@@ -9,6 +9,7 @@ import TicTacToe from './pages/TicTacToe';
 import Pomodoro from './pages/Pomodoro';
 import Ecommerce from './pages/Ecommerce';
 import Cart from './pages/Cart';
+import Quorum from './quorum/Quorum';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="/pomodoro" element={<Pomodoro />} />
         <Route path="/ecommerce" element={<Ecommerce />} />
         <Route path="/ecommerce/cart" element={<Cart />} />
+        <Route path="/quorum" element={<Quorum />} />
       </Routes>
     </Router>
   );
