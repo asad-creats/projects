@@ -149,8 +149,8 @@ function Home() {
       {/* Intro */}
       <section className="home-hero">
         <img
-          src="/ChatGPT Image Dec 24, 2025, 03_10_52 AM.png"
-          alt="Profile"
+          src="/profile.png"
+          alt="Asad"
           className="home-avatar"
         />
         <div>
