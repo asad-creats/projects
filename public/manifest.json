@@ -1,6 +1,6 @@
 {
-  "short_name": "AI Tasks",
-  "name": "AI Task Manager",
+  "short_name": "Portfolio",
+  "name": "Asad's Portfolio",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +20,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#0b0f17",
-  "background_color": "#0b0f17"
+  "theme_color": "#1a1712",
+  "background_color": "#1a1712"
 }
