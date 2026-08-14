@@ -12,7 +12,7 @@ export class AnthropicClient {
     this.baseUrl = 'https://api.anthropic.com/v1/messages';
   }
 
-  async chat(messages, model = 'claude-3-5-haiku-latest') {
+  async chat(messages, model = 'claude-haiku-4-5') {
     if (!this.apiKey) throw new Error('Anthropic API key is not configured');
 
     // Anthropic takes the system prompt as a top-level field.
