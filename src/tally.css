@@ -33,7 +33,10 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
   font-family:'Geist',ui-sans-serif,system-ui,-apple-system,sans-serif;
   font-feature-settings:'ss01','cv11';
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-body{min-height:100vh;overflow-x:hidden}
+/* clip, not hidden: `hidden` makes body a scroll container, which breaks
+   position:sticky on every route (Quorum's app bar). clip contains overflow
+   without creating one. */
+body{min-height:100vh;overflow-x:clip}
 button{font-family:inherit;color:inherit}
 input,select,textarea{font-family:inherit;color:inherit}
 ::selection{background:var(--accent);color:var(--accent-ink)}

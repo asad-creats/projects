@@ -145,7 +145,11 @@ function HRDashboard({ q, showToast }) {
   const [pTitle, setPTitle] = useState("");
   const [pHours, setPHours] = useState("");
 
-  const employees = data.employees;
+  // HR assigns work rather than receiving it, so they're not part of the
+  // assignable roster: no card (and hence no assign drawer), and their hours
+  // don't count toward team capacity. Matches nonHrCount() in useQuorum.js,
+  // which already excludes HR from the consensus majority.
+  const employees = data.employees.filter((e) => !e.is_hr);
   const busyOf = (eid) => data.busy.find((b) => b.employee_id === eid && b.on_status);
   const totalCap = employees.length * CAP;
   let freeTeam = 0, over = 0, working = 0;
@@ -199,7 +203,13 @@ function HRDashboard({ q, showToast }) {
       </div>
 
       <div className="grid">
-        {shown.length === 0 && <div className="empty" style={{ gridColumn: "1/-1" }}>No one matches this filter right now.</div>}
+        {shown.length === 0 && (
+          <div className="empty" style={{ gridColumn: "1/-1" }}>
+            {employees.length === 0
+              ? "No employees yet — add people in the People tab. HR accounts don't appear here."
+              : "No one matches this filter right now."}
+          </div>
+        )}
         {shown.map((e) => <EmpCard key={e.id} e={e} data={data} tb={tb} now={now} busy={busyOf(e.id)} onOpen={() => setOpen(e.id)} />)}
       </div>
 
