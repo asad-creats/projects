@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaSearch, FaLaptopCode, FaQuran } from "react-icons/fa";
+import { FaSearch, FaLaptopCode, FaQuran, FaUserCheck } from "react-icons/fa";
 import { useNavigate } from 'react-router-dom';
 
 // Brand logos (inline SVG) for the flagship projects.
@@ -50,6 +50,24 @@ const DocProcessorLogo = () => (
   </svg>
 );
 
+const LeadRadarLogo = () => (
+  <svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
+    <defs>
+      <linearGradient id="leadradar-g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#fb7185" />
+        <stop offset="1" stopColor="#e11d48" />
+      </linearGradient>
+    </defs>
+    <rect x="1" y="1" width="38" height="38" rx="11" fill="url(#leadradar-g)" />
+    <g fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round">
+      <circle cx="20" cy="20" r="10" opacity="0.55" />
+      <circle cx="20" cy="20" r="5" />
+      <path d="M20 20l7-7" />
+    </g>
+    <circle cx="26.5" cy="24.5" r="2" fill="#fff" />
+  </svg>
+);
+
 // Display order of the category groups; "Real Estate" leads.
 const GROUP_ORDER = ["Real Estate", "AI & Productivity", "Mobile & Web"];
 
@@ -80,6 +98,17 @@ function Home() {
       tech: ["React", "Vite", "FastAPI", "Firebase", "TanStack Query"],
     },
     {
+      title: "LeadRadar",
+      description: "Lead-scoring dashboard for Follow Up Boss CRM. Syncs leads, calls, texts and deals, ranks every lead Hot/Warm/Cold with a plain-English reason, and builds a daily call list and HTML reports with charts. Live demo runs on realistic sample data.",
+      link: null,
+      externalLink: "https://followupboss-psi.vercel.app/",
+      logo: <LeadRadarLogo />,
+      group: "Real Estate",
+      category: "Data / Python",
+      level: "Full-Stack",
+      tech: ["Python", "FastAPI", "SQLite", "Follow Up Boss API", "Charts"],
+    },
+    {
       title: "Tally",
       description: "Smart to-do app with Supabase backend, local AI via Ollama, Gemini integration, and an AI agent that can manage your tasks through chat.",
       link: "/todo",
@@ -98,6 +127,16 @@ function Home() {
       category: "Full-Stack",
       level: "Full-Stack",
       tech: ["React", "Supabase", "Postgres RLS", "Edge Functions"],
+    },
+    {
+      title: "Face Recognition Attendance",
+      description: "Desktop app that marks attendance from a webcam. Recognized faces are logged to Excel with time-in once per day; unknown faces get a provisional ID and can be named in one click. Runs fully offline with OpenCV's YuNet detector and SFace recognizer.",
+      link: null,
+      icon: <FaUserCheck />,
+      group: "AI & Productivity",
+      category: "AI / Computer Vision",
+      level: "Desktop",
+      tech: ["Python", "OpenCV", "ONNX", "Tkinter", "Excel"],
     },
     {
       title: "Tilawah Together",
