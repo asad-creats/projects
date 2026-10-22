@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { fnv, elapsedMs, budgetH } from "./quorumLogic";
+import { fnv, elapsedMs, budgetH, todayLocal, busyRowOf } from "./quorumLogic";
 
 // In-browser sandbox with the same shape as useQuorum(), so the real UI runs
 // unchanged against sample data. Nothing touches Supabase; a refresh resets it.
 
 const MIN = 60000;
 const isoAgo = (ms) => new Date(Date.now() - ms).toISOString();
+const daysAgo = (n) => todayLocal(new Date(Date.now() - n * 86400000));
 let seq = 0;
 const uid = (p) => `${p}-${Date.now().toString(36)}-${(seq++).toString(36)}`;
 
@@ -22,6 +23,7 @@ function chain(blocks) {
 }
 
 function seed() {
+  const today = todayLocal();
   const employees = [
     { id: "hr-sara", username: "sara", name: "Sara Ahmed", role: "HR", capacity_h: 8, color: "#7A5AD6", is_hr: true },
     { id: "emp-bilal", username: "bilal", name: "Bilal Khan", role: "Designer", capacity_h: 8, color: "#3B45D6", is_hr: false },
@@ -37,7 +39,7 @@ function seed() {
     { id: "t-regress", title: "Regression pass", hours: 2 },
     { id: "t-standup", title: "Client call", hours: 1 },
   ];
-  const a = (o) => ({ elapsed_ms: 0, started_at: null, actual_h: null, reason: "", title: null, hours: null, task_id: null, origin: "assigned", ...o });
+  const a = (o) => ({ elapsed_ms: 0, started_at: null, actual_h: null, reason: "", is_busy: false, work_date: today, title: null, hours: null, task_id: null, origin: "assigned", ...o });
   const assignments = [
     a({ id: "a1", employee_id: "emp-bilal", task_id: "t-mockup", state: "active", elapsed_ms: 50 * MIN, started_at: isoAgo(22 * MIN) }),
     a({ id: "a2", employee_id: "emp-bilal", task_id: "t-review", state: "done", elapsed_ms: 55 * MIN, actual_h: 0.9 }),
@@ -47,8 +49,13 @@ function seed() {
     a({ id: "a6", employee_id: "emp-omar", task_id: "t-api", state: "active", elapsed_ms: 0, started_at: isoAgo(75 * MIN) }),
     a({ id: "a7", employee_id: "emp-omar", task_id: "t-api", state: "todo" }),
     a({ id: "a8", employee_id: "emp-omar", task_id: "t-bugfix", state: "todo" }),
-    a({ id: "a9", employee_id: "emp-lina", origin: "self", title: "Vendor onboarding call", hours: 1, state: "active", started_at: isoAgo(18 * MIN) }),
+    a({ id: "a9", employee_id: "emp-lina", origin: "self", title: "Vendor onboarding call", hours: 0, is_busy: true, state: "active", started_at: isoAgo(18 * MIN) }),
     a({ id: "a10", employee_id: "emp-lina", task_id: "t-regress", state: "done", elapsed_ms: 105 * MIN, actual_h: 1.8 }),
+  ];
+  const busyHistory = [
+    a({ id: "bh1", employee_id: "emp-maya", origin: "self", title: "Interview panel", hours: 1, actual_h: 1, is_busy: true, state: "done", work_date: daysAgo(1) }),
+    a({ id: "bh2", employee_id: "emp-omar", origin: "self", title: "Incident on-call", hours: 1.5, actual_h: 1.5, is_busy: true, state: "done", work_date: daysAgo(2) }),
+    a({ id: "bh3", employee_id: "emp-lina", origin: "self", title: "Training", hours: 0.75, actual_h: 0.75, is_busy: true, state: "done", work_date: daysAgo(3) }),
   ];
   const proposals = [
     { id: "p1", type: "new", title: "Accessibility audit", hours: 3, old_hours: null, task_id: null, proposer: "HR", created_at: isoAgo(3 * 60 * MIN) },
@@ -68,7 +75,10 @@ function seed() {
   const busy = [
     { employee_id: "emp-lina", on_status: true, note: "Vendor onboarding call", updated_at: isoAgo(18 * MIN) },
   ];
-  return { employees, tasks, assignments, proposals, votes, ledger, busy };
+  return {
+    company: { id: "demo", name: "Northwind Studio (demo)" },
+    employees, tasks, assignments, proposals, votes, ledger, busy, busyHistory,
+  };
 }
 
 export function useQuorumDemo({ onExit }) {
@@ -94,7 +104,8 @@ export function useQuorumDemo({ onExit }) {
   const updateRow = (id, changes) =>
     patch((d) => ({ assignments: d.assignments.map((a) => (a.id === id ? { ...a, ...changes } : a)) }));
   const newRow = (o) => ({
-    id: uid("a"), elapsed_ms: 0, started_at: null, actual_h: null, reason: "", title: null, hours: null, task_id: null, origin: "assigned", state: "todo",
+    id: uid("a"), elapsed_ms: 0, started_at: null, actual_h: null, reason: "", is_busy: false,
+    work_date: todayLocal(), title: null, hours: null, task_id: null, origin: "assigned", state: "todo",
     created_at: new Date().toISOString(), ...o,
   });
   const pauseActiveOf = (d, eid) => d.assignments.map((a) =>
@@ -104,6 +115,7 @@ export function useQuorumDemo({ onExit }) {
   // ===================== AUTH (demo) =====================
   const signOut = () => onExit();
   const signIn = async () => {};
+  const registerCompany = async () => {};
   const addEmployee = async (payload) => {
     const username = String(payload.username || "").trim().toLowerCase();
     if (!/^[a-z0-9_.-]{3,32}$/.test(username)) throw new Error("Username must be 3–32 chars: letters, numbers, . _ -");
@@ -134,13 +146,35 @@ export function useQuorumDemo({ onExit }) {
   };
 
   // ===================== BUSY =====================
-  const setBusy = async (note) => patch((d) => ({
-    busy: [...d.busy.filter((b) => b.employee_id !== me.id),
-      { employee_id: me.id, on_status: true, note, updated_at: new Date().toISOString() }],
-  }));
-  const clearBusy = async () => patch((d) => ({
-    busy: d.busy.map((b) => (b.employee_id === me.id ? { ...b, on_status: false, note: "" } : b)),
-  }));
+  const setBusy = async (note) => {
+    const label = (note || "").trim() || "Busy";
+    patch((d) => ({
+      assignments: [...pauseActiveOf(d, me.id), newRow({
+        employee_id: me.id, origin: "self", title: label, hours: 0, is_busy: true,
+        state: "active", started_at: new Date().toISOString(),
+      })],
+      busy: [...d.busy.filter((b) => b.employee_id !== me.id),
+        { employee_id: me.id, on_status: true, note: label, updated_at: new Date().toISOString() }],
+    }));
+  };
+  const clearBusy = async () => {
+    const row = busyRowOf(dataRef.current.assignments, me.id);
+    patch((d) => {
+      let assignments = d.assignments;
+      let busyHistory = d.busyHistory;
+      if (row) {
+        const ms = elapsedMs(row, Date.now());
+        const h = Math.round((ms / 3600000) * 100) / 100;
+        const closed = { ...row, elapsed_ms: ms, started_at: null, state: "done", hours: h, actual_h: h };
+        assignments = d.assignments.map((a) => (a.id === row.id ? closed : a));
+        busyHistory = [closed, ...d.busyHistory];
+      }
+      return {
+        assignments, busyHistory,
+        busy: d.busy.map((b) => (b.employee_id === me.id ? { ...b, on_status: false, note: "" } : b)),
+      };
+    });
+  };
 
   // ===================== CONSENSUS =====================
   const addNewProposal = async (title, hours) => patch((d) => ({
@@ -187,7 +221,7 @@ export function useQuorumDemo({ onExit }) {
     tasksById, quorumNeeded,
     viewAs: setMeId,
     actions: {
-      signIn, signOut, addEmployee,
+      signIn, signOut, addEmployee, registerCompany,
       assignTask, addCustomTask, addSelfTask, removeAssignment,
       startTask, pauseTask, completeTask,
       setBusy, clearBusy,

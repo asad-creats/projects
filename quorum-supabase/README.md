@@ -8,8 +8,12 @@ main/Tally project). Do these once.
   (Settings → API) and the **service_role key** (keep this secret).
 
 ## 2. Create the schema
-- SQL Editor → paste all of `migrations/001_quorum_schema.sql` → Run.
-- This creates the tables, Row-Level Security, realtime, and the genesis ledger block.
+- SQL Editor → run each migration **in order**, pasting the whole file each time:
+  1. `migrations/001_quorum_schema.sql` — tables, RLS, realtime, genesis block.
+  2. `migrations/002_daily_reset_and_busy.sql` — per-day boards + busy tracking.
+  3. `migrations/003_multi_tenant.sql` — companies; every row and policy scoped
+     per company. Existing data is moved into a company named "My company".
+- All three are safe to re-run.
 
 ## 3. Turn off email confirmation (required)
 - Authentication → Sign In / Providers → **Email** → turn **OFF "Confirm email"**.
@@ -39,13 +43,15 @@ REACT_APP_QUORUM_SUPABASE_ANON_KEY=<anon key>
 ```
 Redeploy after setting them on Vercel.
 
-## 6. Create your first HR account
-- Open `/quorum` → on the login card click **"First run? Set up the first HR account"**.
-- Because the employees table is empty, the function allows this one bootstrap call
-  and forces it to HR. After that, only signed-in HR users can add people
-  (People tab).
+## 6. Register a company
+- Open `/quorum` → on the login card click **"New company? Register it here"**.
+- This creates the company, its genesis ledger block and its first account
+  (always HR). Any number of companies can register; each sees only its own data.
+- After that, that company's HR adds people from the **People** tab.
+- Usernames are global across companies, so a taken username is rejected.
 
 ## Data model (quick reference)
+- `companies` — one row per tenant. Every table below has a `company_id`.
 - `employees` — profile per auth user (`is_hr` flag, capacity, colour).
 - `tasks` — the consensus catalog (sealed, assignable tasks).
 - `assignments` — a task on someone's plate. `origin`: `assigned` | `self` | `custom`.
@@ -53,5 +59,6 @@ Redeploy after setting them on Vercel.
 - `ledger_blocks` — append-only sealed chain.
 - `busy_status` — self-reported busy flag + note.
 
-RLS: employees see only their own assignments/busy; HR sees everything; the roster,
-catalog, proposals and ledger are readable by all signed-in users.
+RLS: everything is limited to the caller's company. Within it, employees see only
+their own assignments; HR sees all of the company's; the roster, catalog,
+proposals and ledger are readable by everyone in the company.

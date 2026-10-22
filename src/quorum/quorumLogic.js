@@ -34,7 +34,22 @@ export function elapsedMs(a, now) {
   return base;
 }
 
+// Local calendar day as YYYY-MM-DD. The day boundary is the viewer's local
+// midnight, so this is deliberately NOT toISOString() (that would be UTC and
+// would flip the day at the wrong moment for anyone not on UTC).
+export function todayLocal(d = new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 export const rowsOf = (assignments, eid) => assignments.filter((a) => a.employee_id === eid);
+// Busy periods are ordinary self-assignments flagged is_busy, so busy time is
+// just their hours. Counts the running segment too, so the card ticks live.
+export const busyRowOf = (assignments, eid) =>
+  rowsOf(assignments, eid).find((a) => a.is_busy && (a.state === "active" || a.state === "paused"));
+export function busyMsOf(assignments, eid, now) {
+  return rowsOf(assignments, eid).reduce((s, a) => (a.is_busy ? s + elapsedMs(a, now) : s), 0);
+}
 export const activeOf = (assignments, eid) => rowsOf(assignments, eid).find((a) => a.state === "active");
 export const scheduledLoad = (assignments, eid, tasksById) =>
   rowsOf(assignments, eid).reduce((s, a) => s + budgetH(a, tasksById), 0);

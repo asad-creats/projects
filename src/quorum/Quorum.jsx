@@ -9,7 +9,7 @@ import "./quorum.css";
 import {
   CAP, COLORS, initials, fmtH, fmtClock, taskMeta, isDone, elapsedMs,
   rowsOf, activeOf, scheduledLoad, remainingLoad, doneBudget, doneCount, workedH,
-  overrunH, status, pendClass, STATE_PILL,
+  overrunH, status, pendClass, STATE_PILL, busyRowOf, busyMsOf, todayLocal,
 } from "./quorumLogic";
 
 /* ============================ root ============================ */
@@ -81,7 +81,8 @@ function ConfigNeeded({ onTryDemo }) {
 
 /* ============================ login ============================ */
 function Login({ q, showToast, onTryDemo, onReplayIntro }) {
-  const [mode, setMode] = useState("signin"); // 'signin' | 'setup'
+  const [mode, setMode] = useState("signin"); // 'signin' | 'register'
+  const [companyName, setCompany] = useState("");
   const [username, setU] = useState("");
   const [password, setP] = useState("");
   const [name, setName] = useState("");
@@ -95,9 +96,8 @@ function Login({ q, showToast, onTryDemo, onReplayIntro }) {
       if (mode === "signin") {
         await q.actions.signIn(username, password);
       } else {
-        const r = await q.actions.addEmployee({ username, password, name: name || username, role: "HR", is_hr: true });
-        if (!r.bootstrap) throw new Error("An admin already exists — ask them to add you.");
-        await q.actions.signIn(username, password);
+        if (!companyName.trim()) throw new Error("Enter your company's name.");
+        await q.actions.registerCompany({ companyName, name: name || username, username, password });
       }
     } catch (e2) { setErr(e2.message); } finally { setBusy(false); }
   };
@@ -106,19 +106,21 @@ function Login({ q, showToast, onTryDemo, onReplayIntro }) {
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
         <div className="glyph">⛓</div>
-        <h1>{mode === "signin" ? "Quorum" : "Set up your first HR account"}</h1>
-        <p className="login-sub">{mode === "signin" ? "Sign in to your workspace" : "This becomes the admin who can add everyone else"}</p>
+        <h1>{mode === "signin" ? "Quorum" : "Register your company"}</h1>
+        <p className="login-sub">{mode === "signin" ? "Sign in to your workspace" : "You'll be its HR admin and can add everyone else"}</p>
         {err && <div className="login-err">{err}</div>}
-        {mode === "setup" && (
+        {mode === "register" && (<>
+          <div className="login-field"><label>Company name</label>
+            <input type="text" value={companyName} onChange={(e) => setCompany(e.target.value)} placeholder="e.g. Acme Ltd" /></div>
           <div className="login-field"><label>Your name</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Asad Subhani" /></div>
-        )}
+        </>)}
         <div className="login-field"><label>Username</label>
           <input type="text" autoComplete="username" value={username} onChange={(e) => setU(e.target.value)} placeholder="username" /></div>
         <div className="login-field"><label>Password</label>
           <input type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(e) => setP(e.target.value)} placeholder="••••••••" /></div>
         <button className="btn wide" type="submit" disabled={busy} style={{ marginTop: 6 }}>
-          {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create HR account"}
+          {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Register company"}
         </button>
         {mode === "signin" && (
           <button className="btn ghost wide" type="button" onClick={onTryDemo} style={{ marginTop: 8 }}>
@@ -132,7 +134,7 @@ function Login({ q, showToast, onTryDemo, onReplayIntro }) {
         )}
         <div className="login-note">
           {mode === "signin"
-            ? <button type="button" className="linklike" onClick={() => { setMode("setup"); setErr(""); }}>First run? Set up the first HR account</button>
+            ? <button type="button" className="linklike" onClick={() => { setMode("register"); setErr(""); }}>New company? Register it here</button>
             : <button type="button" className="linklike" onClick={() => { setMode("signin"); setErr(""); }}>← Back to sign in</button>}
         </div>
       </form>
@@ -163,7 +165,7 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
       <div className="bar">
         <div className="brand">
           <div className="glyph">⛓</div>
-          <div><h1>Quorum</h1><p>{q.demo ? "Northwind Studio (demo) · " : ""}{q.me.name} · {isHr ? "HR" : q.me.role || "Employee"}</p></div>
+          <div><h1>Quorum</h1><p>{q.data.company?.name ? `${q.data.company.name} · ` : ""}{q.me.name} · {isHr ? "HR" : q.me.role || "Employee"}</p></div>
         </div>
         <div className="tabs" role="tablist">
           {tabs.map(([k, label]) => (
@@ -198,7 +200,7 @@ function DemoBanner({ q }) {
           ))}
         </select>
       </label>
-      <button type="button" className="linklike" onClick={() => q.actions.signOut()}>Exit demo → sign in</button>
+      <button type="button" className="linklike" onClick={() => q.actions.signOut()}>Exit demo → sign in or register</button>
     </div>
   );
 }
@@ -303,6 +305,7 @@ function EmpCard({ e, data, tb, now, busy, onOpen }) {
   const free = Math.max(0, CAP - committed);
   const rows = rowsOf(data.assignments, e.id), total = rows.length, done = doneCount(data.assignments, e.id);
   const act = activeOf(data.assignments, e.id);
+  const busyRow = busyRowOf(data.assignments, e.id);
   const ring = busy ? "var(--over)" : st.cls === "over" ? "var(--over)" : st.cls === "busy" ? "var(--busy)" : (st.cls === "free" && committed > 0 ? "var(--good)" : "var(--line)");
   return (
     <button className="card" onClick={onOpen}>
@@ -321,7 +324,12 @@ function EmpCard({ e, data, tb, now, busy, onOpen }) {
         </div>
         <div className="cap-note" dangerouslySetInnerHTML={{ __html: (committed > CAP ? "⚠ +" + fmtH(committed - CAP) + " over capacity" : `<b style="color:var(--good)">${fmtH(free)}</b> free to assign`) + ` · ${done}/${total} done` }} />
       </div>
-      {busy && <div className="busy-chip" title="Self-reported">🔴 Busy — {busy.note || "no note"}</div>}
+      {busy && (
+        <div className="busy-chip" title="Self-reported — timer runs until they mark themselves available">
+          🔴 Busy — {busy.note || "no note"}
+          {busyRow && <span className="mono busy-elapsed">{fmtClock(elapsedMs(busyRow, now))}</span>}
+        </div>
+      )}
       {act
         ? <div className="hr-work"><span className="work-dot" /><span className="mono">{fmtClock(elapsedMs(act, now))}</span><span className="hw-name">· {taskMeta(act, tb).title}</span></div>
         : (done === total && total > 0
@@ -340,6 +348,20 @@ function Drawer({ q, eid, tb, showToast, onClose }) {
   const [pushAmt, setPushAmt] = useState("");
   const [pushUnit, setPushUnit] = useState("min");
   useEffect(() => { const onKey = (ev) => ev.key === "Escape" && onClose(); document.addEventListener("keydown", onKey); return () => document.removeEventListener("keydown", onKey); }, [onClose]);
+  // Busy history comes from a wider query than the day board, so HR sees a
+  // pattern rather than a single snapshot. Above the early return below, since
+  // hooks must run in the same order on every render.
+  const busyDays = useMemo(() => {
+    const today = todayLocal();
+    const byDay = {};
+    (data.busyHistory || [])
+      .filter((a) => a.employee_id === eid && a.work_date !== today)
+      .forEach((a) => {
+        const d = byDay[a.work_date] || (byDay[a.work_date] = { date: a.work_date, ms: 0, sessions: 0 });
+        d.ms += (Number(a.actual_h) || 0) * 3600000; d.sessions++;
+      });
+    return Object.values(byDay).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7);
+  }, [data.busyHistory, eid]);
   if (!e) return null;
 
   const rows = rowsOf(data.assignments, e.id);
@@ -347,6 +369,8 @@ function Drawer({ q, eid, tb, showToast, onClose }) {
   const doneB = doneBudget(data.assignments, e.id, tb), pending = committed - doneB, free = Math.max(0, CAP - committed);
   const denom = Math.max(CAP, committed);
   const busy = data.busy.find((b) => b.employee_id === e.id && b.on_status);
+  const busyRow = busyRowOf(data.assignments, e.id);
+  const busyToday = busyMsOf(data.assignments, e.id, now);
   const assignedIds = rows.map((a) => a.task_id).filter(Boolean);
   const avail = data.tasks.filter((t) => !assignedIds.includes(t.id));
 
@@ -382,7 +406,30 @@ function Drawer({ q, eid, tb, showToast, onClose }) {
               <i><span className="sw f" />{fmtH(free)} free</i>
             </div>
             <div className="cap-note" style={{ marginTop: 9 }} dangerouslySetInnerHTML={{ __html: (committed > CAP ? "⚠ " + fmtH(committed - CAP) + " over capacity" : `<b style="color:var(--good)">${fmtH(free)}</b> free to assign`) + ` · ${fmtH(workedH(data.assignments, e.id, tb, now))} actually logged` }} />
-            {busy && <div className="drawer-busy">🔴 Self-reported busy — {busy.note || "no note"}</div>}
+            {busy && (
+              <div className="drawer-busy">
+                🔴 Self-reported busy — {busy.note || "no note"}
+                {busyRow && <span className="mono busy-elapsed">{fmtClock(elapsedMs(busyRow, now))}</span>}
+              </div>
+            )}
+            {(busyToday > 0 || busyDays.length > 0) && (
+              <div className="busy-log">
+                <div className="bl-head">
+                  <span>Busy time</span>
+                  <b className="mono">{fmtH(Math.round((busyToday / 3600000) * 10) / 10)} today</b>
+                </div>
+                {busyDays.length === 0
+                  ? <div className="bl-none">No busy periods logged on earlier days.</div>
+                  : busyDays.map((d) => (
+                      <div className="bl-row" key={d.date}>
+                        <span className="mono bl-date">{d.date.slice(5)}</span>
+                        <span className="bl-bar"><i style={{ width: Math.min(100, (d.ms / 3600000 / CAP) * 100) + "%" }} /></span>
+                        <span className="mono bl-h">{fmtH(Math.round((d.ms / 3600000) * 10) / 10)}</span>
+                        <span className="bl-n">{d.sessions}×</span>
+                      </div>
+                    ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -467,6 +514,7 @@ function EmployeeView({ q, showToast }) {
   const bigColor = allDone ? "var(--good)" : accent;
   const bigLabel = allDone ? "Day complete" : sched === 0 ? "No tasks yet" : st.label;
   const busy = data.busy.find((b) => b.employee_id === e.id && b.on_status);
+  const myBusyRow = busyRowOf(data.assignments, e.id);
 
   const submitLate = async (a) => { if (!lateReason.trim()) return showToast("Add a short reason so HR has context."); await q.actions.completeTask(a, true, lateReason.trim()); setLateFor(null); setLateReason(""); };
   const submitRetime = async (t) => { const h = parseFloat(retimeVal); if (!h || h <= 0) return showToast("Enter a valid number of hours."); if (h === t.hours) return showToast("That's the same as the current time."); await q.actions.addRetimeProposal({ id: t.taskId, title: t.title, hours: t.hours }, Math.min(8, h)); setRetimeFor(null); showToast(`Time change proposed — <b>${esc(t.title)}</b>`); };
@@ -487,7 +535,10 @@ function EmployeeView({ q, showToast }) {
 
           {busy ? (
             <div className="busy-banner on"><span className="busy-dot" />
-              <div className="bb-text"><b>You've marked yourself busy</b><span>{busy.note || "No note given"}</span></div>
+              <div className="bb-text">
+                <b>You've marked yourself busy{myBusyRow && <span className="mono busy-elapsed">{fmtClock(elapsedMs(myBusyRow, now))}</span>}</b>
+                <span>{busy.note || "No note given"} · logged to your day when you mark yourself available</span>
+              </div>
               <button className="abtn" onClick={() => q.actions.clearBusy()}>I'm available</button>
             </div>
           ) : busyOpen ? (
