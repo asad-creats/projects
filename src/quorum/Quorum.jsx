@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuorum } from "./useQuorum";
+import { useQuorumDemo } from "./useQuorumDemo";
 import "./quorum.css";
 import {
   CAP, COLORS, initials, fmtH, fmtClock, taskMeta, isDone, elapsedMs,
@@ -9,18 +10,34 @@ import {
 } from "./quorumLogic";
 
 /* ============================ root ============================ */
+// Live (Supabase) and demo (in-browser sample data) share every screen below;
+// only the data hook differs. /quorum?demo opens straight into the demo.
 export default function Quorum() {
-  const q = useQuorum();
+  const [demo, setDemo] = useState(() => new URLSearchParams(window.location.search).has("demo"));
+  return demo
+    ? <QuorumDemo onExit={() => setDemo(false)} />
+    : <QuorumLive onTryDemo={() => setDemo(true)} />;
+}
+
+function QuorumLive({ onTryDemo }) {
+  return <QuorumFrame q={useQuorum()} onTryDemo={onTryDemo} />;
+}
+
+function QuorumDemo({ onExit }) {
+  return <QuorumFrame q={useQuorumDemo({ onExit })} />;
+}
+
+function QuorumFrame({ q, onTryDemo }) {
   const [theme, setTheme] = useState(null); // null = follow OS
   const [toast, setToast] = useState("");
   const navigate = useNavigate();
   const showToast = (m) => { setToast(m); window.clearTimeout(showToast._t); showToast._t = window.setTimeout(() => setToast(""), 2600); };
 
   let body;
-  if (!q.configured) body = <ConfigNeeded />;
+  if (!q.configured) body = <ConfigNeeded onTryDemo={onTryDemo} />;
   else if (q.loading) body = <div className="loading-screen">Connecting to your workspace…</div>;
-  else if (!q.session || !q.me) body = <Login q={q} showToast={showToast} />;
-  else body = <Shell q={q} showToast={showToast} theme={theme} setTheme={setTheme} onExit={() => navigate("/")} />;
+  else if (!q.session || !q.me) body = <Login q={q} showToast={showToast} onTryDemo={onTryDemo} />;
+  else body = <Shell key={q.me.id} q={q} showToast={showToast} theme={theme} setTheme={setTheme} onExit={() => navigate("/")} />;
 
   return (
     <div className="quorum-app" data-theme={theme || undefined}>
@@ -30,18 +47,19 @@ export default function Quorum() {
   );
 }
 
-function ConfigNeeded() {
+function ConfigNeeded({ onTryDemo }) {
   return (
     <div className="login-wrap"><div className="login-card">
       <div className="glyph">⛓</div>
       <h1>Quorum isn't configured yet</h1>
       <p className="login-sub">Set <code>REACT_APP_QUORUM_SUPABASE_URL</code> and <code>REACT_APP_QUORUM_SUPABASE_ANON_KEY</code> in your environment, then reload.</p>
+      <button className="btn wide" type="button" onClick={onTryDemo} style={{ marginTop: 6 }}>Try the demo instead</button>
     </div></div>
   );
 }
 
 /* ============================ login ============================ */
-function Login({ q, showToast }) {
+function Login({ q, showToast, onTryDemo }) {
   const [mode, setMode] = useState("signin"); // 'signin' | 'setup'
   const [username, setU] = useState("");
   const [password, setP] = useState("");
@@ -81,6 +99,11 @@ function Login({ q, showToast }) {
         <button className="btn wide" type="submit" disabled={busy} style={{ marginTop: 6 }}>
           {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create HR account"}
         </button>
+        {mode === "signin" && (
+          <button className="btn ghost wide" type="button" onClick={onTryDemo} style={{ marginTop: 8 }}>
+            Just looking? Try the demo — no sign-up
+          </button>
+        )}
         <div className="login-note">
           {mode === "signin"
             ? <button type="button" className="linklike" onClick={() => { setMode("setup"); setErr(""); }}>First run? Set up the first HR account</button>
@@ -106,10 +129,11 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
 
   return (
     <>
+      {q.demo && <DemoBanner q={q} />}
       <div className="bar">
         <div className="brand">
           <div className="glyph">⛓</div>
-          <div><h1>Quorum</h1><p>{q.me.name} · {isHr ? "HR" : q.me.role || "Employee"}</p></div>
+          <div><h1>Quorum</h1><p>{q.demo ? "Northwind Studio (demo) · " : ""}{q.me.name} · {isHr ? "HR" : q.me.role || "Employee"}</p></div>
         </div>
         <div className="tabs" role="tablist">
           {tabs.map(([k, label]) => (
@@ -117,7 +141,7 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
           ))}
         </div>
         <button className="icon-btn" title="Toggle theme" onClick={toggleTheme}>◐</button>
-        <button className="icon-btn" title="Sign out" onClick={() => q.actions.signOut()}>⏻</button>
+        <button className="icon-btn" title={q.demo ? "Exit demo" : "Sign out"} onClick={() => q.actions.signOut()}>⏻</button>
       </div>
       <main>
         {view === "hr" && isHr && <HRDashboard q={q} showToast={showToast} />}
@@ -126,6 +150,24 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
         {view === "people" && isHr && <People q={q} showToast={showToast} />}
       </main>
     </>
+  );
+}
+
+/* ============================ demo banner ============================ */
+function DemoBanner({ q }) {
+  return (
+    <div className="demo-banner" role="status">
+      <span><b>Demo</b> · sample data, nothing is saved — refresh to reset.</span>
+      <label>
+        Viewing as{" "}
+        <select value={q.me.id} onChange={(e) => q.viewAs(e.target.value)}>
+          {q.data.employees.map((e) => (
+            <option key={e.id} value={e.id}>{e.name} — {e.is_hr ? "HR" : e.role || "Employee"}</option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="linklike" onClick={() => q.actions.signOut()}>Exit demo → sign in</button>
+    </div>
   );
 }
 
