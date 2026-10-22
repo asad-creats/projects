@@ -16,6 +16,8 @@ import { AgentChat } from './components/AgentChat';
 import { AiSettings } from './components/AiSettings';
 import { OnboardingTour } from './components/OnboardingTour';
 import { Icon } from './components/TallyIcons';
+import { TallyIntro, TALLY_INTRO_KEY } from './components/TallyIntro';
+import { introSeen, markIntroSeen } from '../components/ProductIntro';
 
 const TOUR_KEY = 'ai_task_tour_v1';
 
@@ -28,6 +30,20 @@ const isDueToday = (date) => relativeDue(date).label === 'Today';
 function Todo() {
   const auth = useAuth();
   const [demo, setDemo] = useState(() => new URLSearchParams(window.location.search).has('demo'));
+  // First-time visitors get the animated intro before anything else.
+  const [intro, setIntro] = useState(() => !introSeen(TALLY_INTRO_KEY));
+  const closeIntro = (toDemo) => {
+    markIntroSeen(TALLY_INTRO_KEY);
+    setIntro(false);
+    if (toDemo !== undefined) setDemo(toDemo);
+  };
+  const introEl = intro && (
+    <TallyIntro
+      onDemo={() => closeIntro(true)}
+      // Came in on a ?demo link: "Sign in" leaves the demo; otherwise it just closes.
+      onClose={() => closeIntro(demo ? false : undefined)}
+    />
+  );
 
   // Brand the browser tab as "Tally" while the todo app is mounted, then
   // restore the portfolio's title/favicon on the way out.
@@ -46,13 +62,13 @@ function Todo() {
   }, []);
 
   if (demo) {
-    return <TodoApp auth={DEMO_AUTH} demo onExitDemo={() => setDemo(false)} />;
+    return <>{introEl}<TodoApp auth={DEMO_AUTH} demo onExitDemo={() => setDemo(false)} /></>;
   }
   if (!auth.authReady) {
     return <div className="tally-loader">Loading…</div>;
   }
   if (auth.isConfigured && !auth.user) {
-    return <Login auth={auth} onTryDemo={() => setDemo(true)} />;
+    return <>{introEl}<Login auth={auth} onTryDemo={() => setDemo(true)} onReplayIntro={() => setIntro(true)} /></>;
   }
   return <TodoApp auth={auth} />;
 }

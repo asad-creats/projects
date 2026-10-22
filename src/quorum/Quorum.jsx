@@ -2,6 +2,9 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuorum } from "./useQuorum";
 import { useQuorumDemo } from "./useQuorumDemo";
+import { QuorumIntro, QUORUM_INTRO_KEY } from "./QuorumIntro";
+import { introSeen, markIntroSeen } from "../components/ProductIntro";
+import { QuorumTour, tourSeen, markTourSeen } from "./QuorumTour";
 import "./quorum.css";
 import {
   CAP, COLORS, initials, fmtH, fmtClock, taskMeta, isDone, elapsedMs,
@@ -12,22 +15,40 @@ import {
 /* ============================ root ============================ */
 // Live (Supabase) and demo (in-browser sample data) share every screen below;
 // only the data hook differs. /quorum?demo opens straight into the demo.
+// First-time visitors get the animated intro before anything else.
 export default function Quorum() {
   const [demo, setDemo] = useState(() => new URLSearchParams(window.location.search).has("demo"));
-  return demo
-    ? <QuorumDemo onExit={() => setDemo(false)} />
-    : <QuorumLive onTryDemo={() => setDemo(true)} />;
+  const [intro, setIntro] = useState(() => !introSeen(QUORUM_INTRO_KEY));
+  const closeIntro = (toDemo) => {
+    markIntroSeen(QUORUM_INTRO_KEY);
+    setIntro(false);
+    if (toDemo !== undefined) setDemo(toDemo);
+  };
+  return (
+    <>
+      {demo
+        ? <QuorumDemo onExit={() => setDemo(false)} />
+        : <QuorumLive onTryDemo={() => setDemo(true)} onReplayIntro={() => setIntro(true)} />}
+      {intro && (
+        <QuorumIntro
+          onDemo={() => closeIntro(true)}
+          // Came in on a ?demo link: "Sign in" leaves the demo; otherwise it just closes.
+          onClose={() => closeIntro(demo ? false : undefined)}
+        />
+      )}
+    </>
+  );
 }
 
-function QuorumLive({ onTryDemo }) {
-  return <QuorumFrame q={useQuorum()} onTryDemo={onTryDemo} />;
+function QuorumLive({ onTryDemo, onReplayIntro }) {
+  return <QuorumFrame q={useQuorum()} onTryDemo={onTryDemo} onReplayIntro={onReplayIntro} />;
 }
 
 function QuorumDemo({ onExit }) {
   return <QuorumFrame q={useQuorumDemo({ onExit })} />;
 }
 
-function QuorumFrame({ q, onTryDemo }) {
+function QuorumFrame({ q, onTryDemo, onReplayIntro }) {
   const [theme, setTheme] = useState(null); // null = follow OS
   const [toast, setToast] = useState("");
   const navigate = useNavigate();
@@ -36,7 +57,7 @@ function QuorumFrame({ q, onTryDemo }) {
   let body;
   if (!q.configured) body = <ConfigNeeded onTryDemo={onTryDemo} />;
   else if (q.loading) body = <div className="loading-screen">Connecting to your workspace…</div>;
-  else if (!q.session || !q.me) body = <Login q={q} showToast={showToast} onTryDemo={onTryDemo} />;
+  else if (!q.session || !q.me) body = <Login q={q} showToast={showToast} onTryDemo={onTryDemo} onReplayIntro={onReplayIntro} />;
   else body = <Shell key={q.me.id} q={q} showToast={showToast} theme={theme} setTheme={setTheme} onExit={() => navigate("/")} />;
 
   return (
@@ -59,7 +80,7 @@ function ConfigNeeded({ onTryDemo }) {
 }
 
 /* ============================ login ============================ */
-function Login({ q, showToast, onTryDemo }) {
+function Login({ q, showToast, onTryDemo, onReplayIntro }) {
   const [mode, setMode] = useState("signin"); // 'signin' | 'setup'
   const [username, setU] = useState("");
   const [password, setP] = useState("");
@@ -104,6 +125,11 @@ function Login({ q, showToast, onTryDemo }) {
             Just looking? Try the demo — no sign-up
           </button>
         )}
+        {mode === "signin" && onReplayIntro && (
+          <button type="button" className="linklike" onClick={onReplayIntro} style={{ display: "block", margin: "12px auto 0" }}>
+            ▶ Watch the 30-second intro
+          </button>
+        )}
         <div className="login-note">
           {mode === "signin"
             ? <button type="button" className="linklike" onClick={() => { setMode("setup"); setErr(""); }}>First run? Set up the first HR account</button>
@@ -118,6 +144,10 @@ function Login({ q, showToast, onTryDemo }) {
 function Shell({ q, showToast, theme, setTheme, onExit }) {
   const isHr = q.me.is_hr;
   const [view, setView] = useState(isHr ? "hr" : "emp");
+  // First time each role lands here, walk them through it (once per browser).
+  const role = isHr ? "hr" : "emp";
+  const [tourOpen, setTourOpen] = useState(() => !tourSeen(role));
+  const finishTour = () => { markTourSeen(role); setTourOpen(false); };
   const tabs = isHr
     ? [["hr", "▦ Dashboard"], ["ledger", "⛓ Ledger"], ["people", "◑ People"]]
     : [["emp", "◔ My day"], ["ledger", "⛓ Ledger"]];
@@ -137,9 +167,10 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
         </div>
         <div className="tabs" role="tablist">
           {tabs.map(([k, label]) => (
-            <button key={k} className="tab" role="tab" aria-selected={view === k} onClick={() => setView(k)}>{label}</button>
+            <button key={k} className="tab" role="tab" data-tour={`tab-${k}`} aria-selected={view === k} onClick={() => setView(k)}>{label}</button>
           ))}
         </div>
+        <button className="icon-btn" title="Replay tour" onClick={() => setTourOpen(true)}>?</button>
         <button className="icon-btn" title="Toggle theme" onClick={toggleTheme}>◐</button>
         <button className="icon-btn" title={q.demo ? "Exit demo" : "Sign out"} onClick={() => q.actions.signOut()}>⏻</button>
       </div>
@@ -149,6 +180,7 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
         {view === "ledger" && <Ledger q={q} showToast={showToast} canVote={!isHr} />}
         {view === "people" && isHr && <People q={q} showToast={showToast} />}
       </main>
+      {tourOpen && <QuorumTour role={role} onNavigate={setView} onFinish={finishTour} />}
     </>
   );
 }
@@ -219,7 +251,7 @@ function HRDashboard({ q, showToast }) {
         <p>Availability is computed from committed task hours against each person's daily capacity — no one sets their own status. Open a card to review the day and assign work.</p>
       </div>
 
-      <div className="hr-propose">
+      <div className="hr-propose" data-tour="propose">
         <div className="hp-icon">＋</div>
         <div className="hp-text"><b>Propose a new task</b><span>Only HR can add tasks. It goes to team consensus before anyone can be assigned.</span></div>
         <div className="hp-form">
@@ -229,7 +261,7 @@ function HRDashboard({ q, showToast }) {
         </div>
       </div>
 
-      <div className="stats">
+      <div className="stats" data-tour="stats">
         <Stat k="Team capacity" v={<>{totalCap}<small>h</small></>} />
         <Stat k="Free to assign" v={<>{fmtNum(freeTeam)}<small>h</small></>} color="var(--good)" />
         <Stat k="Working now" v={working} color={working ? "var(--accent)" : "var(--ink)"} />
@@ -244,7 +276,7 @@ function HRDashboard({ q, showToast }) {
         ))}
       </div>
 
-      <div className="grid">
+      <div className="grid" data-tour="team">
         {shown.length === 0 && (
           <div className="empty" style={{ gridColumn: "1/-1" }}>
             {employees.length === 0
@@ -449,7 +481,7 @@ function EmployeeView({ q, showToast }) {
       </div>
 
       <div className="two-col">
-        <div className="panel">
+        <div className="panel" data-tour="my-status">
           <h3>{e.name}</h3>
           <p className="sub">{e.role || "Employee"} · capacity {CAP}h/day</p>
 
@@ -494,7 +526,7 @@ function EmployeeView({ q, showToast }) {
               onRemoveSelf={() => q.actions.removeAssignment(a.id)} />
           )) : <div className="empty">Nothing on your plate yet — log a task below or wait for an assignment.</div>}
 
-          <div className="log-form">
+          <div className="log-form" data-tour="log-own">
             <span className="mf-label">＋ Log your own task</span>
             <div className="log-row">
               <input type="text" value={logTitle} onChange={(e2) => setLogTitle(e2.target.value)} placeholder="What are you working on?" maxLength={46} />
@@ -507,7 +539,7 @@ function EmployeeView({ q, showToast }) {
           <div className="locked-note">⚿ Assigned-task hours are fixed by consensus. You can log your own tasks and flag yourself busy — the availability figure still adds it all up.</div>
         </div>
 
-        <div className="panel">
+        <div className="panel" data-tour="queue">
           <h3>Consensus queue</h3>
           <p className="sub">New tasks (from HR) and time changes (from employees) need a majority to agree before they're sealed.</p>
           <ConsensusList q={q} votable />

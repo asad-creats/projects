@@ -11,7 +11,7 @@ const SECURITY_QUESTIONS = [
 
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim());
 
-export const Login = ({ auth, onTryDemo }) => {
+export const Login = ({ auth, onTryDemo, onReplayIntro }) => {
   const [method, setMethod] = useState('username'); // 'username' | 'email'
   const [mode, setMode] = useState('signin');        // 'signin' | 'signup' | 'forgot'
 
@@ -228,6 +228,11 @@ export const Login = ({ auth, onTryDemo }) => {
         {onTryDemo && (
           <button type="button" className="auth-google" style={{ marginTop: 16 }} onClick={onTryDemo}>
             Just looking? Try the demo — no sign-up
+          </button>
+        )}
+        {onReplayIntro && (
+          <button type="button" className="auth-link" style={{ display: 'block', margin: '12px auto 0' }} onClick={onReplayIntro}>
+            ▶ Watch the 30-second intro
           </button>
         )}
 
