@@ -24,13 +24,16 @@ export const AgentChat = ({
   const freeCapped = aiConfig.mode === 'free' && freeRemaining <= 0;
 
   const providerReady =
-    aiConfig.mode === 'free'
+    aiConfig.mode === 'demo'
+      ? true
+      : aiConfig.mode === 'free'
       ? !freeCapped
       : aiConfig.provider === 'ollama'
         ? ollamaConnected
         : !!aiConfig.apiKey;
 
   const statusBadge = (() => {
+    if (aiConfig.mode === 'demo') return 'Demo · simulated AI';
     if (aiConfig.mode === 'free') {
       return freeCapped ? 'Daily limit reached' : `Free · ${freeRemaining}/${FREE_LIMIT} left`;
     }

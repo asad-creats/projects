@@ -23,8 +23,11 @@ const isDueToday = (date) => relativeDue(date).label === 'Today';
 
 // Auth gate: show the login screen until the user is signed in, then mount the
 // app fresh (so useTodos fetches the now-authenticated user's tasks).
+// Demo mode (/todo?demo, or "Try the demo" on the login card) skips auth and
+// runs on in-browser sample tasks with a simulated AI.
 function Todo() {
   const auth = useAuth();
+  const [demo, setDemo] = useState(() => new URLSearchParams(window.location.search).has('demo'));
 
   // Brand the browser tab as "Tally" while the todo app is mounted, then
   // restore the portfolio's title/favicon on the way out.
@@ -42,16 +45,22 @@ function Todo() {
     };
   }, []);
 
+  if (demo) {
+    return <TodoApp auth={DEMO_AUTH} demo onExitDemo={() => setDemo(false)} />;
+  }
   if (!auth.authReady) {
     return <div className="tally-loader">Loading…</div>;
   }
   if (auth.isConfigured && !auth.user) {
-    return <Login auth={auth} />;
+    return <Login auth={auth} onTryDemo={() => setDemo(true)} />;
   }
   return <TodoApp auth={auth} />;
 }
 
-function TodoApp({ auth }) {
+const DEMO_AUTH = { displayName: 'Guest', isConfigured: false, signOut: () => {} };
+const DEMO_AI_CONFIG = { mode: 'demo', provider: 'demo', model: '', apiKey: '' };
+
+function TodoApp({ auth, demo = false, onExitDemo }) {
   const [filter, setFilter] = useState('all');
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskDate, setNewTaskDate] = useState(getTodayString());
@@ -65,12 +74,13 @@ function TodoApp({ auth }) {
   const agentRef = useRef(null);
   const settingsBtnRef = useRef(null);
 
-  const { config: aiConfig, update: updateAiConfig } = useAiConfig();
+  const { config: savedAiConfig, update: updateAiConfig } = useAiConfig();
+  const aiConfig = demo ? DEMO_AI_CONFIG : savedAiConfig;
 
   const {
     todos, setTodos, loading,
     addTodo, toggleTodo, deleteTodo,
-  } = useTodos();
+  } = useTodos({ demo });
 
   const { selectedModel, ollamaConnected } = useOllama();
 
@@ -97,10 +107,12 @@ function TodoApp({ auth }) {
     { ref: addTaskRef, title: '📝 Add your tasks', body: 'Type a task, pick a date and category, and hit add. Everything here is private to your account.' },
     { ref: agentRef, title: '🤖 Your AI assistant', body: 'Ask in plain English — “add a task to call the bank tomorrow”, “what’s overdue?”, “suggest priorities”. It can create and organize tasks for you.' },
     { ref: settingsBtnRef, title: '🔑 Free tier & your own key', body: 'You get free AI messages a day. Need more, or a different model? Open AI Settings (⚙️) to plug in your own API key — unlimited, stays in your browser.' },
-  ];
+  ].filter((step) => !demo || step.ref !== settingsBtnRef); // no AI settings in the demo
 
   const aiReady =
-    aiConfig.mode === 'free'
+    demo
+      ? true
+      : aiConfig.mode === 'free'
       ? auth.isConfigured
       : aiConfig.provider === 'ollama'
         ? ollamaConnected
@@ -212,13 +224,13 @@ function TodoApp({ auth }) {
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <button className="pill" title="Replay tour" onClick={() => setShowTour(true)}><Icon.help style={{ width: 15, height: 15 }} /></button>
-            <button ref={settingsBtnRef} className="pill" title="AI settings" onClick={() => setShowAiSettings(true)}><Icon.settings style={{ width: 15, height: 15 }} /></button>
+            {!demo && <button ref={settingsBtnRef} className="pill" title="AI settings" onClick={() => setShowAiSettings(true)}><Icon.settings style={{ width: 15, height: 15 }} /></button>}
             <Link to="/" className="pill" title="Home"><Icon.home style={{ width: 15, height: 15 }} /></Link>
             <div className="user">
               <span>{name}</span>
               <span className="av">{name.charAt(0)}</span>
             </div>
-            <button className="pill" title="Sign out" onClick={auth.signOut}><Icon.logout style={{ width: 15, height: 15 }} /></button>
+            <button className="pill" title={demo ? 'Exit demo' : 'Sign out'} onClick={demo ? onExitDemo : auth.signOut}><Icon.logout style={{ width: 15, height: 15 }} /></button>
           </div>
         </div>
 
@@ -243,6 +255,12 @@ function TodoApp({ auth }) {
             </div>
           </div>
 
+          {demo && (
+            <div className="tally-banner">
+              <strong>You're in the demo.</strong> Sample tasks and a simulated AI — try “add a task to call the bank tomorrow”. Nothing is saved; refresh to reset.{' '}
+              <button className="linkish" onClick={onExitDemo}>Sign up to keep your tasks →</button>
+            </div>
+          )}
           {taskLimitHit && (
             <div className="tally-banner">
               <strong>Task limit reached.</strong> The free plan is limited to 100 tasks — delete a few to add more.

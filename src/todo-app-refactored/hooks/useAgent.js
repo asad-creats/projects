@@ -6,11 +6,15 @@ import { OpenAIClient } from '../services/openaiClient';
 import { AnthropicClient } from '../services/anthropicClient';
 import { OpenRouterClient } from '../services/openRouterClient';
 import { OllamaClient } from '../services/ollamaClient';
+import { DemoAiClient } from '../services/demoClient';
 import { DEFAULT_MODELS } from './useAiConfig';
 import { supabase } from '../../supabaseClient';
 
 // Build the right AI client + model from the user's config.
 function buildClient(aiConfig, ollamaSelectedModel) {
+  if (aiConfig.mode === 'demo') {
+    return { client: new DemoAiClient(), model: 'demo', provider: 'demo' };
+  }
   if (aiConfig.mode === 'free') {
     return { client: new ProxyClient(), model: DEFAULT_MODELS.gemini, provider: 'free' };
   }

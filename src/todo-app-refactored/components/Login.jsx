@@ -11,7 +11,7 @@ const SECURITY_QUESTIONS = [
 
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim());
 
-export const Login = ({ auth }) => {
+export const Login = ({ auth, onTryDemo }) => {
   const [method, setMethod] = useState('username'); // 'username' | 'email'
   const [mode, setMode] = useState('signin');        // 'signin' | 'signup' | 'forgot'
 
@@ -224,6 +224,12 @@ export const Login = ({ auth }) => {
           {!isForgot && mode === 'signup' && (<>Already have an account? <button className="auth-link" onClick={() => switchMode('signin')}>Sign in</button></>)}
           {isForgot && (<button className="auth-link" onClick={() => switchMode('signin')}>← Back to sign in</button>)}
         </div>
+
+        {onTryDemo && (
+          <button type="button" className="auth-google" style={{ marginTop: 16 }} onClick={onTryDemo}>
+            Just looking? Try the demo — no sign-up
+          </button>
+        )}
 
         <Link to="/" className="auth-back">← Back to Home</Link>
       </div>
