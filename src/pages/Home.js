@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   FaSearch, FaLaptopCode, FaQuran, FaUserCheck, FaGithub, FaArrowRight,
-  FaExternalLinkAlt, FaEnvelope, FaRobot, FaHome, FaLayerGroup,
+  FaExternalLinkAlt, FaEnvelope, FaRobot, FaHome, FaLayerGroup, FaMoon, FaSun,
 } from "react-icons/fa";
 import { useNavigate } from 'react-router-dom';
 import './Home.css';
@@ -92,6 +92,21 @@ const PROFILE = {
   email: "asadssubhani@gmail.com",
   contactNote: "I'm open to freelance projects and full-time roles, especially in real estate tech and AI tooling. Reach out and I'll get back to you quickly.",
 };
+
+const THEME_KEY = "portfolio-theme";
+
+// Large serif headings look broken when a line ends mid-word at a hyphen
+// ("full-" / "stack"), so hyphenated words are kept on one line.
+const keepHyphenated = (text) =>
+  text.split(/(\S+-\S+)/).map((part, i) =>
+    /\S+-\S+/.test(part) ? <span key={i} style={{ whiteSpace: 'nowrap' }}>{part}</span> : part);
+
+// Blocks that fade and rise into view on scroll (see the effect in Home).
+const REVEAL_SELECTOR = [
+  ".home-hero-text", ".home-hero-photo", ".home-stats > div", ".home-section-head",
+  ".home-about > div", ".home-principle", "#skills > .home-kicker", "#skills > h2",
+  ".home-skill-group", ".home-contact",
+].join(", ");
 
 const NAV = [
   { id: "work", label: "Work" },
@@ -254,8 +269,41 @@ function Home() {
   const liveCount = projects.filter(p => p.link || p.externalLink).length;
   const skillCount = SKILLS.reduce((n, s) => n + s.items.length, 0);
 
+  // Theme: follows the system until the visitor picks one, which is remembered.
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem(THEME_KEY); } catch { return null; }
+  });
+  const prefersLight = () => window.matchMedia('(prefers-color-scheme: light)').matches;
+  const isLight = theme ? theme === 'light' : prefersLight();
+  const toggleTheme = () => {
+    const next = isLight ? 'dark' : 'light';
+    setTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch { /* storage blocked: just this visit */ }
+  };
+
+  // Fade-and-rise as blocks scroll into view. Skipped entirely under
+  // prefers-reduced-motion, and without IntersectionObserver nothing is hidden.
+  const wrapRef = useRef(null);
+  useEffect(() => {
+    const root = wrapRef.current;
+    if (!root || !('IntersectionObserver' in window)) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const els = [...root.querySelectorAll(REVEAL_SELECTOR)];
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => {
+        if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); }
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    els.forEach((el, i) => {
+      el.classList.add('reveal');
+      el.style.setProperty('--reveal-i', i % 4);
+      io.observe(el);
+    });
+    return () => io.disconnect();
+  }, []);
+
   return (
-    <div className="home-wrap">
+    <div className="home-wrap" ref={wrapRef} data-theme={theme || undefined}>
       {/* Top navigation */}
       <header className="home-nav">
         <a href="#top" className="home-brand">
@@ -265,6 +313,10 @@ function Home() {
         <nav className="home-nav-links">
           {NAV.map(n => <a key={n.id} href={`#${n.id}`}>{n.label}</a>)}
         </nav>
+        <button type="button" className="home-theme" onClick={toggleTheme}
+          aria-label={isLight ? 'Switch to dark mode' : 'Switch to light mode'}>
+          {isLight ? <FaMoon /> : <FaSun />}
+        </button>
         <a className="home-nav-cta" href={PROFILE.github} target="_blank" rel="noreferrer">
           <FaGithub /> <span>GitHub</span>
         </a>
@@ -276,7 +328,7 @@ function Home() {
           <div className="home-eyebrow"><span className="home-pulse" /> {PROFILE.status}</div>
           <h1>
             Hi, I'm {PROFILE.name}.<br />
-            <span className="home-hero-accent">{PROFILE.headline}</span>
+            <span className="home-hero-accent">{keepHyphenated(PROFILE.headline)}</span>
           </h1>
           <p>{PROFILE.tagline}</p>
           <div className="home-hero-actions">
@@ -290,7 +342,7 @@ function Home() {
       </section>
 
       <div className="home-stats">
-        <div><b>{projects.length}</b><span>projects built</span></div>
+        <div className="home-stat-feature"><b>{projects.length}</b><span>projects built</span></div>
         <div><b>{liveCount}</b><span>live demos to try</span></div>
         <div><b>{projects.filter(p => p.group === 'Real Estate').length}</b><span>real estate tools</span></div>
         <div><b>{skillCount}+</b><span>tools &amp; technologies</span></div>
@@ -339,7 +391,7 @@ function Home() {
         <div className="home-about">
           <div>
             <div className="home-kicker">About me</div>
-            <h2>{PROFILE.aboutHeading}</h2>
+            <h2>{keepHyphenated(PROFILE.aboutHeading)}</h2>
             {PROFILE.bio.map((para, i) => <p key={i} className="home-about-p">{para}</p>)}
           </div>
           <div className="home-focus">
