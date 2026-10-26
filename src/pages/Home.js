@@ -79,7 +79,7 @@ const GROUP_ORDER = ["Real Estate", "AI & Productivity", "Mobile & Web"];
 // Edit these to change what the page says about you.
 const PROFILE = {
   name: "Asad",
-  headline: "I build AI tools and full-stack apps.",
+  headline: "I turn messy, manual workflows into AI-powered apps that just run.",
   status: "Full-stack developer · open to work",
   tagline: "From AI document pipelines for realtors to team apps with real-time sync — I ship working products you can click through today, not just mockups.",
   aboutHeading: "I turn messy, real-world work into simple, AI-powered software.",
@@ -327,7 +327,7 @@ function Home() {
         <div className="home-hero-text">
           <div className="home-eyebrow"><span className="home-pulse" /> {PROFILE.status}</div>
           <h1>
-            Hi, I'm {PROFILE.name}.<br />
+            I’m {PROFILE.name}.<br />
             <span className="home-hero-accent">{keepHyphenated(PROFILE.headline)}</span>
           </h1>
           <p>{PROFILE.tagline}</p>
