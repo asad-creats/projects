@@ -127,6 +127,22 @@ export function useQuorumDemo({ onExit }) {
     return { ok: true };
   };
 
+  // ===================== PASSWORDS (demo) =====================
+  // Nothing is stored; these just let visitors click through the screens.
+  const [recoveryCode, setRecoveryCode] = useState(null);
+  const checkPassword = (password) => {
+    if (String(password).length < 6) throw new Error("Password must be at least 6 characters.");
+  };
+  const changePassword = async (password) => checkPassword(password);
+  const resetPassword = async (_employeeId, password) => { checkPassword(password); return { ok: true }; };
+  const recoverAccount = async () => {};
+  const newRecoveryCode = async () => {
+    const A = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    const raw = Array.from({ length: 20 }, () => A[Math.floor(Math.random() * 32)]).join("");
+    setRecoveryCode(raw.match(/.{4}/g).join("-"));
+  };
+  const dismissRecoveryCode = () => setRecoveryCode(null);
+
   // ===================== TASK LIFECYCLE =====================
   const assignTask = async (eid, taskId) => patch((d) => ({ assignments: [...d.assignments, newRow({ employee_id: eid, task_id: taskId })] }));
   const addCustomTask = async (eid, title, hours) => patch((d) => ({ assignments: [...d.assignments, newRow({ employee_id: eid, origin: "custom", title, hours })] }));
@@ -218,10 +234,11 @@ export function useQuorumDemo({ onExit }) {
 
   return {
     demo: true, configured: true, loading: false, session: { demo: true }, me, data, now,
-    tasksById, quorumNeeded,
+    tasksById, quorumNeeded, recoveryCode,
     viewAs: setMeId,
     actions: {
       signIn, signOut, addEmployee, registerCompany,
+      changePassword, resetPassword, recoverAccount, newRecoveryCode, dismissRecoveryCode,
       assignTask, addCustomTask, addSelfTask, removeAssignment,
       startTask, pauseTask, completeTask,
       setBusy, clearBusy,

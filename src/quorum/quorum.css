@@ -510,3 +510,42 @@
   .quorum-app .q-tour-dots span { width: 6px; height: 6px; border-radius: 99px; background: var(--line); transition: all .25s ease; }
   .quorum-app .q-tour-dots span.on { width: 16px; background: var(--accent); }
   .quorum-app .q-tour-back { background: none; border: 0; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 6px 8px; }
+
+  /* ---------- Passwords: forgot flow, account modal, recovery code ---------- */
+  .quorum-app .forgot-link { display: block; margin: 7px 0 0 auto; font-size: 12px; }
+  .quorum-app .forgot-choices { display: grid; gap: 8px; margin-bottom: 14px; }
+  .quorum-app .forgot-choice { display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: pointer; font: inherit; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 11px; padding: 11px 14px; transition: .16s; }
+  .quorum-app .forgot-choice b { font-size: 13.5px; font-weight: 620; }
+  .quorum-app .forgot-choice span { font-size: 12px; color: var(--muted); }
+  .quorum-app .forgot-choice:hover { border-color: var(--accent); }
+  .quorum-app .forgot-choice[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .quorum-app .forgot-help { font-size: 13px; line-height: 1.55; color: var(--ink); background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 11px; padding: 12px 14px; }
+  .quorum-app .forgot-fine { font-size: 12px; color: var(--muted); text-align: center; margin: 12px 0 0; line-height: 1.5; }
+  .quorum-app input.code-input { font-family: var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+
+  .quorum-app .q-modal { position: fixed; z-index: 60; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 30px 80px -30px rgba(0,0,0,.55); }
+  .quorum-app .q-modal header { display: flex; align-items: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+  .quorum-app .q-modal header h3 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+  .quorum-app .q-modal header .x { margin-left: auto; }
+  .quorum-app .q-modal .body { padding: 18px 20px 20px; }
+  .quorum-app .modal-sub { font-size: 13px; color: var(--muted); line-height: 1.55; margin: 0 0 14px; }
+  .quorum-app .modal-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .quorum-app .recovery-code { font-family: var(--mono); font-size: 17px; font-weight: 600; letter-spacing: .06em; text-align: center;
+    padding: 16px 12px; margin-bottom: 10px; border-radius: 11px; background: var(--surface-2); border: 1px dashed var(--accent);
+    color: var(--ink); user-select: all; word-break: break-all; }
+
+  .quorum-app .roster-row { flex-direction: column; align-items: stretch; }
+  .quorum-app .roster-main { display: flex; align-items: center; gap: 13px; }
+  .quorum-app .roster-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .quorum-app .roster-actions .hr-badge { margin-left: 0; }
+  .quorum-app .reset-row { display: flex; gap: 8px; margin-top: 12px; }
+  .quorum-app .reset-row input { flex: 1; min-width: 0; }
+  @media (max-width: 520px) {
+    .quorum-app .roster-main { flex-wrap: wrap; }
+    .quorum-app .reset-row { flex-wrap: wrap; }
+    .quorum-app .reset-row input { flex-basis: 100%; }
+  }

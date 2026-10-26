@@ -80,14 +80,21 @@ function ConfigNeeded({ onTryDemo }) {
 }
 
 /* ============================ login ============================ */
+const LOGIN_HEADINGS = {
+  signin: ["Quorum", "Sign in to your workspace"],
+  register: ["Register your company", "You'll be its HR admin and can add everyone else"],
+  forgot: ["Forgot your password?", "No problem, here's how to get back in"],
+};
+
 function Login({ q, showToast, onTryDemo, onReplayIntro }) {
-  const [mode, setMode] = useState("signin"); // 'signin' | 'register'
+  const [mode, setMode] = useState("signin"); // 'signin' | 'register' | 'forgot'
   const [companyName, setCompany] = useState("");
   const [username, setU] = useState("");
   const [password, setP] = useState("");
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const goTo = (m) => { setMode(m); setErr(""); setP(""); };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -102,12 +109,15 @@ function Login({ q, showToast, onTryDemo, onReplayIntro }) {
     } catch (e2) { setErr(e2.message); } finally { setBusy(false); }
   };
 
+  if (mode === "forgot") return <ForgotPassword q={q} initialUsername={username} onBack={() => goTo("signin")} />;
+
+  const [title, sub] = LOGIN_HEADINGS[mode];
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
         <div className="glyph">⛓</div>
-        <h1>{mode === "signin" ? "Quorum" : "Register your company"}</h1>
-        <p className="login-sub">{mode === "signin" ? "Sign in to your workspace" : "You'll be its HR admin and can add everyone else"}</p>
+        <h1>{title}</h1>
+        <p className="login-sub">{sub}</p>
         {err && <div className="login-err">{err}</div>}
         {mode === "register" && (<>
           <div className="login-field"><label>Company name</label>
@@ -118,7 +128,11 @@ function Login({ q, showToast, onTryDemo, onReplayIntro }) {
         <div className="login-field"><label>Username</label>
           <input type="text" autoComplete="username" value={username} onChange={(e) => setU(e.target.value)} placeholder="username" /></div>
         <div className="login-field"><label>Password</label>
-          <input type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(e) => setP(e.target.value)} placeholder="••••••••" /></div>
+          <input type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(e) => setP(e.target.value)} placeholder="••••••••" />
+          {mode === "signin" && (
+            <button type="button" className="linklike forgot-link" onClick={() => goTo("forgot")}>Forgot password?</button>
+          )}
+        </div>
         <button className="btn wide" type="submit" disabled={busy} style={{ marginTop: 6 }}>
           {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Register company"}
         </button>
@@ -134,11 +148,167 @@ function Login({ q, showToast, onTryDemo, onReplayIntro }) {
         )}
         <div className="login-note">
           {mode === "signin"
-            ? <button type="button" className="linklike" onClick={() => { setMode("register"); setErr(""); }}>New company? Register it here</button>
-            : <button type="button" className="linklike" onClick={() => { setMode("signin"); setErr(""); }}>← Back to sign in</button>}
+            ? <button type="button" className="linklike" onClick={() => goTo("register")}>New company? Register it here</button>
+            : <button type="button" className="linklike" onClick={() => goTo("signin")}>← Back to sign in</button>}
         </div>
       </form>
     </div>
+  );
+}
+
+// Accounts have no real email, so there are no reset links. Employees ask HR;
+// HR admins prove it's them with the recovery code they saved at sign-up.
+function ForgotPassword({ q, initialUsername, onBack }) {
+  const [who, setWho] = useState(null); // null | 'employee' | 'hr'
+  const [username, setU] = useState(initialUsername);
+  const [code, setCode] = useState("");
+  const [password, setP] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [title, sub] = LOGIN_HEADINGS.forgot;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr("");
+    if (password.length < 6) return setErr("Choose a password of at least 6 characters.");
+    if (password !== confirm) return setErr("The two passwords don't match.");
+    setBusy(true);
+    try { await q.actions.recoverAccount({ username, code, password }); }
+    catch (e2) { setErr(e2.message); setBusy(false); }
+  };
+
+  return (
+    <div className="login-wrap">
+      <form className="login-card" onSubmit={submit}>
+        <div className="glyph">🔑</div>
+        <h1>{title}</h1>
+        <p className="login-sub">{sub}</p>
+
+        <div className="forgot-choices" role="radiogroup" aria-label="Who are you?">
+          <button type="button" role="radio" aria-checked={who === "employee"} className="forgot-choice" onClick={() => setWho("employee")}>
+            <b>I'm an employee</b><span>Someone at my company added me</span>
+          </button>
+          <button type="button" role="radio" aria-checked={who === "hr"} className="forgot-choice" onClick={() => setWho("hr")}>
+            <b>I'm the HR admin</b><span>I have a recovery code</span>
+          </button>
+        </div>
+
+        {who === "employee" && (
+          <div className="forgot-help">
+            Ask your company's <b>HR admin</b> to reset it. In Quorum they open <b>People</b>, find your name and
+            click <b>Reset password</b>, then tell you the new one. You can change it after you sign in.
+          </div>
+        )}
+
+        {who === "hr" && (<>
+          {err && <div className="login-err">{err}</div>}
+          <div className="login-field"><label>Username</label>
+            <input type="text" autoComplete="username" value={username} onChange={(e) => setU(e.target.value)} placeholder="username" required /></div>
+          <div className="login-field"><label>Recovery code</label>
+            <input type="text" className="code-input" autoComplete="off" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" required /></div>
+          <div className="login-field"><label>New password</label>
+            <input type="password" autoComplete="new-password" value={password} onChange={(e) => setP(e.target.value)} placeholder="min 6 characters" required /></div>
+          <div className="login-field"><label>Confirm new password</label>
+            <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="type it again" required /></div>
+          <button className="btn wide" type="submit" disabled={busy} style={{ marginTop: 6 }}>
+            {busy ? "Please wait…" : "Set new password and sign in"}
+          </button>
+          <p className="forgot-fine">
+            Lost the code too? Another HR admin in your company can reset your password from People.
+          </p>
+        </>)}
+
+        <div className="login-note">
+          <button type="button" className="linklike" onClick={onBack}>← Back to sign in</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ============================ account (password + recovery code) ============================ */
+function Modal({ title, onClose, children }) {
+  useEffect(() => { const onKey = (ev) => ev.key === "Escape" && onClose?.(); document.addEventListener("keydown", onKey); return () => document.removeEventListener("keydown", onKey); }, [onClose]);
+  return (
+    <>
+      <div className="scrim on" onClick={onClose} />
+      <div className="q-modal" role="dialog" aria-modal="true" aria-label={title}>
+        <header><h3>{title}</h3>{onClose && <button type="button" className="icon-btn x" onClick={onClose} aria-label="Close">✕</button>}</header>
+        <div className="body">{children}</div>
+      </div>
+    </>
+  );
+}
+
+function AccountModal({ q, showToast, onClose }) {
+  const [password, setP] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setErr("");
+    if (password.length < 6) return setErr("Choose a password of at least 6 characters.");
+    if (password !== confirm) return setErr("The two passwords don't match.");
+    setBusy(true);
+    try { await q.actions.changePassword(password); showToast("Password changed"); onClose(); }
+    catch (e2) { setErr(e2.message); } finally { setBusy(false); }
+  };
+  const makeCode = async () => {
+    setBusy(true);
+    try { await q.actions.newRecoveryCode(); onClose(); }
+    catch (e2) { setErr(e2.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title="Your account" onClose={onClose}>
+      <p className="modal-sub">Signed in as <span className="uname">@{q.me.username}</span></p>
+      <form onSubmit={save}>
+        <div className="section-label"><span>Change password</span></div>
+        {err && <div className="login-err">{err}</div>}
+        <div className="login-field"><label>New password</label>
+          <input type="password" autoComplete="new-password" value={password} onChange={(e) => setP(e.target.value)} placeholder="min 6 characters" /></div>
+        <div className="login-field"><label>Confirm new password</label>
+          <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="type it again" /></div>
+        <button className="btn wide" type="submit" disabled={busy || !password}>Save new password</button>
+      </form>
+      {q.me.is_hr && (
+        <div className="modal-section">
+          <div className="section-label"><span>Recovery code</span></div>
+          <p className="modal-sub">
+            If you ever forget your password, this code lets you set a new one from the sign-in screen.
+            Making a new code cancels the old one.
+          </p>
+          <button className="btn ghost wide" type="button" disabled={busy} onClick={makeCode}>Create a new recovery code</button>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// Shown once, right after the code is created; only a hash is kept on the server.
+function RecoveryCodeModal({ q, showToast }) {
+  const code = q.recoveryCode;
+  const [saved, setSaved] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(code); showToast("Recovery code copied"); }
+    catch { showToast("Couldn't copy. Select the code and copy it by hand."); }
+  };
+  return (
+    <Modal title="Save your recovery code">
+      <p className="modal-sub">
+        If you forget your password, this code is the only way to get back into your HR account without help.
+        Keep it somewhere safe, like a password manager. <b>It won't be shown again.</b>
+      </p>
+      <div className="recovery-code" aria-label="Recovery code">{code}</div>
+      <button className="btn ghost wide" type="button" onClick={copy}>Copy code</button>
+      <label className="checkbox-row" style={{ marginTop: 16 }}>
+        <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> I've saved my recovery code
+      </label>
+      <button className="btn wide" type="button" disabled={!saved} onClick={q.actions.dismissRecoveryCode}>Done</button>
+    </Modal>
   );
 }
 
@@ -149,6 +319,7 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
   // First time each role lands here, walk them through it (once per browser).
   const role = isHr ? "hr" : "emp";
   const [tourOpen, setTourOpen] = useState(() => !tourSeen(role));
+  const [accountOpen, setAccountOpen] = useState(false);
   const finishTour = () => { markTourSeen(role); setTourOpen(false); };
   const tabs = isHr
     ? [["hr", "▦ Dashboard"], ["ledger", "⛓ Ledger"], ["people", "◑ People"]]
@@ -173,6 +344,7 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
           ))}
         </div>
         <button className="icon-btn" title="Replay tour" onClick={() => setTourOpen(true)}>?</button>
+        <button className="icon-btn" title="Account & password" aria-label="Account and password" onClick={() => setAccountOpen(true)}>🔑</button>
         <button className="icon-btn" title="Toggle theme" onClick={toggleTheme}>◐</button>
         <button className="icon-btn" title={q.demo ? "Exit demo" : "Sign out"} onClick={() => q.actions.signOut()}>⏻</button>
       </div>
@@ -182,7 +354,9 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
         {view === "ledger" && <Ledger q={q} showToast={showToast} canVote={!isHr} />}
         {view === "people" && isHr && <People q={q} showToast={showToast} />}
       </main>
-      {tourOpen && <QuorumTour role={role} onNavigate={setView} onFinish={finishTour} />}
+      {tourOpen && !q.recoveryCode && <QuorumTour role={role} onNavigate={setView} onFinish={finishTour} />}
+      {accountOpen && <AccountModal q={q} showToast={showToast} onClose={() => setAccountOpen(false)} />}
+      {q.recoveryCode && <RecoveryCodeModal q={q} showToast={showToast} />}
     </>
   );
 }
@@ -763,7 +937,7 @@ function People({ q, showToast }) {
       <div className="head">
         <p className="eyebrow">Admin</p>
         <h2>People</h2>
-        <p>Add employees and set their password. They sign in with the username you choose — no email needed.</p>
+        <p>Add employees and set their password. They sign in with the username you choose — no email needed. If someone forgets their password, click <b>Reset password</b> next to their name.</p>
       </div>
       <div className="people-grid">
         <form className="people-form" onSubmit={submit}>
@@ -785,16 +959,55 @@ function People({ q, showToast }) {
           <div className="section-label"><span>Roster</span><span>{data.employees.length}</span></div>
           <div className="roster">
             {data.employees.map((e) => (
-              <div className="roster-row" key={e.id}>
-                <div className="avatar" style={{ background: e.color, width: 38, height: 38 }}>{initials(e.name)}</div>
-                <div><div className="name">{e.name}</div><div className="role">{e.role || "—"} · <span className="uname">@{e.username}</span></div></div>
-                {e.is_hr && <span className="hr-badge">HR</span>}
-              </div>
+              <RosterRow key={e.id} q={q} e={e} isMe={e.id === q.me.id} showToast={showToast} />
             ))}
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+// One person on the roster. HR can set a new password for anyone else here;
+// their own password is changed from the 🔑 account menu instead.
+function RosterRow({ q, e, isMe, showToast }) {
+  const [resetting, setResetting] = useState(false);
+  const [password, setP] = useState("");
+  const [busy, setBusy] = useState(false);
+  const first = e.name.split(" ")[0];
+
+  const save = async (ev) => {
+    ev.preventDefault();
+    if (password.length < 6) return showToast("Use at least 6 characters.");
+    setBusy(true);
+    try {
+      await q.actions.resetPassword(e.id, password);
+      showToast(`New password set for <b>${esc(first)}</b>. Share it with them.`);
+      setResetting(false); setP("");
+    } catch (e2) { showToast(esc(e2.message)); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="roster-row">
+      <div className="roster-main">
+        <div className="avatar" style={{ background: e.color, width: 38, height: 38 }}>{initials(e.name)}</div>
+        <div><div className="name">{e.name}{isMe && <span className="uname"> (you)</span>}</div><div className="role">{e.role || "—"} · <span className="uname">@{e.username}</span></div></div>
+        <div className="roster-actions">
+          {e.is_hr && <span className="hr-badge">HR</span>}
+          {!isMe && !resetting && (
+            <button type="button" className="btn ghost sm" onClick={() => setResetting(true)}>Reset password</button>
+          )}
+        </div>
+      </div>
+      {resetting && (
+        <form className="reset-row" onSubmit={save}>
+          <input type="text" autoComplete="off" value={password} onChange={(ev) => setP(ev.target.value)}
+            placeholder={`New password for ${first} (min 6)`} aria-label={`New password for ${e.name}`} autoFocus />
+          <button className="btn sm" type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+          <button className="btn ghost sm" type="button" onClick={() => { setResetting(false); setP(""); }}>Cancel</button>
+        </form>
+      )}
+    </div>
   );
 }
 

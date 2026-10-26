@@ -105,28 +105,56 @@ export function useQuorum() {
   };
   const signOut = () => quorum.auth.signOut();
 
-  const addEmployee = async (payload) => {
-    // HR-only (server enforces); the new person joins the caller's company.
+  // Calls the create-employee Edge Function (it holds the service_role key),
+  // sending the session token when there is one so the server knows who's asking.
+  const callAccountFn = async (payload, fallbackError) => {
     const headers = { "Content-Type": "application/json" };
     if (session) headers.Authorization = `Bearer ${session.access_token}`;
     const res = await fetch(`${functionsBase}/create-employee`, {
       method: "POST", headers, body: JSON.stringify(payload),
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || "Could not create employee.");
+    if (!res.ok) throw new Error(body.error || fallbackError);
+    return body;
+  };
+
+  // A recovery code to show HR once (after registering or recovering), then forget.
+  const [recoveryCode, setRecoveryCode] = useState(null);
+  const dismissRecoveryCode = () => setRecoveryCode(null);
+
+  const addEmployee = async (payload) => {
+    // HR-only (server enforces); the new person joins the caller's company.
+    const body = await callAccountFn(payload, "Could not create employee.");
     scheduleReload();
     return body;
   };
 
   // Public: creates a new company and its first (HR) account, then signs in.
   const registerCompany = async ({ companyName, name, username, password }) => {
-    const res = await fetch(`${functionsBase}/create-employee`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ company_name: companyName, name, username, password, role: "HR" }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || "Could not register the company.");
+    const body = await callAccountFn(
+      { company_name: companyName, name, username, password, role: "HR" }, "Could not register the company.");
+    if (body.recovery_code) setRecoveryCode(body.recovery_code);
     await signIn(username, password);
+  };
+
+  // ===================== PASSWORDS =====================
+  // Logins use synthetic emails, so there are no reset links: HR resets people,
+  // and an HR admin who forgets their own password uses their recovery code.
+  const changePassword = async (password) => {
+    const { error } = await quorum.auth.updateUser({ password });
+    if (error) throw new Error(error.message);
+  };
+  const resetPassword = (employeeId, password) =>
+    callAccountFn({ action: "reset_password", employee_id: employeeId, password }, "Could not reset the password.");
+  const recoverAccount = async ({ username, code, password }) => {
+    const body = await callAccountFn(
+      { action: "recover", username, recovery_code: code, password }, "Could not recover the account.");
+    setRecoveryCode(body.recovery_code); // the old code is used up
+    await signIn(username, password);
+  };
+  const newRecoveryCode = async () => {
+    const body = await callAccountFn({ action: "new_recovery_code" }, "Could not create a recovery code.");
+    setRecoveryCode(body.recovery_code);
   };
 
   // ===================== TASK LIFECYCLE =====================
@@ -238,9 +266,10 @@ export function useQuorum() {
 
   return {
     configured: quorumConfigured, loading, session, me, data, now,
-    tasksById, quorumNeeded,
+    tasksById, quorumNeeded, recoveryCode,
     actions: {
       signIn, signOut, addEmployee, registerCompany,
+      changePassword, resetPassword, recoverAccount, newRecoveryCode, dismissRecoveryCode,
       assignTask, addCustomTask, addSelfTask, removeAssignment,
       startTask, pauseTask, completeTask,
       setBusy, clearBusy,

@@ -13,7 +13,9 @@ main/Tally project). Do these once.
   2. `migrations/002_daily_reset_and_busy.sql` — per-day boards + busy tracking.
   3. `migrations/003_multi_tenant.sql` — companies; every row and policy scoped
      per company. Existing data is moved into a company named "My company".
-- All three are safe to re-run.
+  4. `migrations/004_recovery_codes.sql` — hashed HR recovery codes for
+     password recovery (browser has no access to this table).
+- All four are safe to re-run.
 
 ## 3. Turn off email confirmation (required)
 - Authentication → Sign In / Providers → **Email** → turn **OFF "Confirm email"**.
@@ -50,6 +52,16 @@ Redeploy after setting them on Vercel.
 - After that, that company's HR adds people from the **People** tab.
 - Usernames are global across companies, so a taken username is rejected.
 
+## Forgotten passwords
+Logins use synthetic `<username>@quorum.app` addresses, so there are no email
+reset links. Instead:
+- **Employees** ask HR, who clicks **Reset password** next to them on People.
+- **HR admins** use their recovery code: Sign in → **Forgot password?** →
+  "I'm the HR admin". The code is shown once when the company registers, and a
+  new one can be made from the 🔑 account menu (which also changes your own
+  password). Using a code uses it up and shows a fresh one.
+- Lost the code as well? Another HR in the company can reset it from People.
+
 ## Data model (quick reference)
 - `companies` — one row per tenant. Every table below has a `company_id`.
 - `employees` — profile per auth user (`is_hr` flag, capacity, colour).
@@ -58,6 +70,7 @@ Redeploy after setting them on Vercel.
 - `proposals` + `proposal_votes` — the consensus queue (`new` | `retime`).
 - `ledger_blocks` — append-only sealed chain.
 - `busy_status` — self-reported busy flag + note.
+- `recovery_codes` — SHA-256 hash of each HR's recovery code (service role only).
 
 RLS: everything is limited to the caller's company. Within it, employees see only
 their own assignments; HR sees all of the company's; the roster, catalog,
