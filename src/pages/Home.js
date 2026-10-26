@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { FaSearch, FaLaptopCode, FaQuran, FaUserCheck } from "react-icons/fa";
+import {
+  FaSearch, FaLaptopCode, FaQuran, FaUserCheck, FaGithub, FaArrowRight,
+  FaExternalLinkAlt, FaEnvelope, FaRobot, FaHome, FaLayerGroup,
+} from "react-icons/fa";
 import { useNavigate } from 'react-router-dom';
+import './Home.css';
 
 // Brand logos (inline SVG) for the flagship projects.
 const TallyLogo = () => (
@@ -70,6 +74,51 @@ const LeadRadarLogo = () => (
 
 // Display order of the category groups; "Real Estate" leads.
 const GROUP_ORDER = ["Real Estate", "AI & Productivity", "Mobile & Web"];
+
+// Personal details shown in the hero, About and Contact sections.
+// Edit these to change what the page says about you.
+const PROFILE = {
+  name: "Asad",
+  headline: "I build AI tools and full-stack apps.",
+  status: "Full-stack developer · open to work",
+  tagline: "From AI document pipelines for realtors to team apps with real-time sync — I ship working products you can click through today, not just mockups.",
+  aboutHeading: "I turn messy, real-world work into simple, AI-powered software.",
+  bio: [
+    "After five years as a transaction coordinator and virtual assistant for US real estate teams, and with daily hands-on work in real estate CRMs, I know the problems agents and coordinators face because I’ve faced them myself. That inside view shapes everything I build.",
+    "I create full-stack web apps, agentic AI workflows, and business automations that take repetitive work off people’s plates, from processing documents to managing leads and generating reports. I use AI where it saves real time, never just for show.",
+    "I learn by building, and every project sharpens the next. If your team is buried in manual work, I can help you automate it.",
+  ],
+  github: "https://github.com/asad-creats",
+  email: "asadssubhani@gmail.com",
+  contactNote: "I'm open to freelance projects and full-time roles, especially in real estate tech and AI tooling. Reach out and I'll get back to you quickly.",
+};
+
+const NAV = [
+  { id: "work", label: "Work" },
+  { id: "about", label: "About" },
+  { id: "skills", label: "Skills" },
+  { id: "contact", label: "Contact" },
+];
+
+const FOCUS = [
+  { icon: <FaRobot />, title: "Practical AI", text: "Document classification, OCR, lead scoring and chat agents that call real tools." },
+  { icon: <FaHome />, title: "Real estate tech", text: "Software for agents and transaction coordinators: deals, documents, follow-ups." },
+  { icon: <FaLayerGroup />, title: "Full-stack products", text: "Auth, databases, row-level security, deploys — end to end, not just the UI." },
+];
+
+const PRINCIPLES = [
+  { title: "Ship something real", text: "Every project has a working build. Most have a live demo you can try without signing up." },
+  { title: "Explain it plainly", text: "Scores come with a reason, AI output gets a review step, and docs are written for people." },
+  { title: "Keep costs sane", text: "Free tiers and local models by default, with paid AI as an opt-in upgrade." },
+];
+
+const SKILLS = [
+  { group: "Frontend", items: ["React", "JavaScript", "Vite", "TanStack Query", "HTML & CSS"] },
+  { group: "Backend", items: ["Python", "FastAPI", "REST APIs", "Docker"] },
+  { group: "AI & Vision", items: ["Gemini API", "Claude API", "Ollama", "OCR", "OpenCV", "ONNX"] },
+  { group: "Data & Cloud", items: ["Supabase", "Postgres + RLS", "Firebase", "SQLite", "Vercel"] },
+  { group: "Mobile & Desktop", items: ["Capacitor", "Android", "Tkinter"] },
+];
 
 function Home() {
   const navigate = useNavigate();
@@ -157,7 +206,8 @@ function Home() {
     project.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     project.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
     project.group.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (project.level || '').toLowerCase().includes(searchTerm.toLowerCase())
+    (project.level || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (project.tech || []).some(t => t.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   // Bucket the (filtered) projects into category groups, preserving GROUP_ORDER
@@ -167,70 +217,194 @@ function Home() {
     ...[...new Set(filteredProjects.map(p => p.group))].filter(g => !GROUP_ORDER.includes(g)),
   ];
 
-  const renderCard = (p, i) => (
-    <div
-      key={p.title + i}
-      className="proj-card"
-      onClick={() => p.link ? navigate(p.link) : p.externalLink && window.open(p.externalLink, '_blank')}
-    >
-      <div className={`proj-icon${p.logo ? ' proj-logo' : ''}`}>{p.logo || p.icon}</div>
-      <h3>{p.title}</h3>
-      <p>{p.description}</p>
-      <div className="proj-tech">
-        {(p.tech || []).map((t) => <span key={t}>{t}</span>)}
+  const openProject = (p) => {
+    if (p.link) navigate(p.link);
+    else if (p.externalLink) window.open(p.externalLink, '_blank', 'noopener');
+  };
+
+  const renderCard = (p, i) => {
+    const clickable = Boolean(p.link || p.externalLink);
+    return (
+      <div
+        key={p.title + i}
+        className={`proj-card${clickable ? '' : ' is-static'}`}
+        onClick={() => openProject(p)}
+        onKeyDown={(e) => clickable && (e.key === 'Enter' || e.key === ' ') && openProject(p)}
+        role={clickable ? 'link' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+      >
+        <div className="proj-top">
+          <div className={`proj-icon${p.logo ? ' proj-logo' : ''}`}>{p.logo || p.icon}</div>
+          <span className="proj-cat">{p.category}</span>
+        </div>
+        <h3>{p.title}</h3>
+        <p>{p.description}</p>
+        <div className="proj-tech">
+          {(p.tech || []).map((t) => <span key={t}>{t}</span>)}
+        </div>
+        <div className="proj-cta">
+          {p.link && <>Open the app <FaArrowRight /></>}
+          {!p.link && p.externalLink && <>Live demo <FaExternalLinkAlt /></>}
+          {!clickable && <span className="proj-cta-muted">{p.level} app · demo on request</span>}
+        </div>
       </div>
-      <div><span className="proj-cat">{p.category}</span></div>
-    </div>
-  );
+    );
+  };
+
+  const liveCount = projects.filter(p => p.link || p.externalLink).length;
+  const skillCount = SKILLS.reduce((n, s) => n + s.items.length, 0);
 
   return (
     <div className="home-wrap">
-      {/* Intro */}
-      <section className="home-hero">
-        <img
-          src="/profile.png"
-          alt="Asad"
-          className="home-avatar"
-        />
-        <div>
-          <h1>Hi, I'm Asad — Full-Stack Developer</h1>
-          <p>I build real products — AI pipelines, mobile apps, and full-stack platforms.</p>
+      {/* Top navigation */}
+      <header className="home-nav">
+        <a href="#top" className="home-brand">
+          <span className="home-brand-mark">{PROFILE.name[0]}</span>
+          <span>{PROFILE.name}</span>
+        </a>
+        <nav className="home-nav-links">
+          {NAV.map(n => <a key={n.id} href={`#${n.id}`}>{n.label}</a>)}
+        </nav>
+        <a className="home-nav-cta" href={PROFILE.github} target="_blank" rel="noreferrer">
+          <FaGithub /> <span>GitHub</span>
+        </a>
+      </header>
+
+      {/* Hero */}
+      <section className="home-hero" id="top">
+        <div className="home-hero-text">
+          <div className="home-eyebrow"><span className="home-pulse" /> {PROFILE.status}</div>
+          <h1>
+            Hi, I'm {PROFILE.name}.<br />
+            <span className="home-hero-accent">{PROFILE.headline}</span>
+          </h1>
+          <p>{PROFILE.tagline}</p>
+          <div className="home-hero-actions">
+            <a href="#work" className="home-btn primary">See my work <FaArrowRight /></a>
+            <a href="#about" className="home-btn">About me</a>
+          </div>
+        </div>
+        <div className="home-hero-photo">
+          <img src="/profile.png" alt={PROFILE.name} className="home-avatar" />
         </div>
       </section>
 
-      {/* Search */}
-      <div className="home-search-wrap">
-        <FaSearch style={{ position: "absolute", left: "39px", top: "50%", transform: "translateY(-50%)", color: "var(--ink-4)", fontSize: "1rem" }} />
-        <input
-          type="text"
-          className="home-search"
-          placeholder="Search projects..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      <div className="home-stats">
+        <div><b>{projects.length}</b><span>projects built</span></div>
+        <div><b>{liveCount}</b><span>live demos to try</span></div>
+        <div><b>{projects.filter(p => p.group === 'Real Estate').length}</b><span>real estate tools</span></div>
+        <div><b>{skillCount}+</b><span>tools &amp; technologies</span></div>
       </div>
 
-      {/* Projects grouped by category */}
-      {groupNames.map((group) => (
-        <section key={group} className="home-group">
-          <h2 className="home-group-title">
-            {group}
-            <span className="home-group-count">
-              {filteredProjects.filter(p => p.group === group).length}
-            </span>
-          </h2>
-          <div className="home-grid">
-            {filteredProjects.filter(p => p.group === group).map(renderCard)}
+      {/* Work */}
+      <section className="home-section" id="work">
+        <div className="home-section-head">
+          <div>
+            <div className="home-kicker">Selected work</div>
+            <h2>Things I've built</h2>
           </div>
-        </section>
-      ))}
+          <div className="home-search-wrap">
+            <FaSearch className="home-search-icon" />
+            <input
+              type="text"
+              className="home-search"
+              placeholder="Search by name or tech…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </div>
 
-      {filteredProjects.length === 0 && (
-        <div className="home-empty">No projects found matching "{searchTerm}"</div>
-      )}
+        {groupNames.map((group) => (
+          <div key={group} className="home-group">
+            <h3 className="home-group-title">
+              {group}
+              <span className="home-group-count">
+                {filteredProjects.filter(p => p.group === group).length}
+              </span>
+            </h3>
+            <div className="home-grid">
+              {filteredProjects.filter(p => p.group === group).map(renderCard)}
+            </div>
+          </div>
+        ))}
+
+        {filteredProjects.length === 0 && (
+          <div className="home-empty">No projects found matching "{searchTerm}"</div>
+        )}
+      </section>
+
+      {/* About */}
+      <section className="home-section" id="about">
+        <div className="home-about">
+          <div>
+            <div className="home-kicker">About me</div>
+            <h2>{PROFILE.aboutHeading}</h2>
+            {PROFILE.bio.map((para, i) => <p key={i} className="home-about-p">{para}</p>)}
+          </div>
+          <div className="home-focus">
+            {FOCUS.map(f => (
+              <div key={f.title} className="home-focus-card">
+                <div className="home-focus-icon">{f.icon}</div>
+                <div>
+                  <h4>{f.title}</h4>
+                  <p>{f.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="home-principles">
+          {PRINCIPLES.map((p, i) => (
+            <div key={p.title} className="home-principle">
+              <span className="home-principle-num">0{i + 1}</span>
+              <h4>{p.title}</h4>
+              <p>{p.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Skills */}
+      <section className="home-section" id="skills">
+        <div className="home-kicker">Toolbox</div>
+        <h2>Skills &amp; technologies</h2>
+        <div className="home-skills">
+          {SKILLS.map(s => (
+            <div key={s.group} className="home-skill-group">
+              <h4>{s.group}</h4>
+              <div className="home-chips">
+                {s.items.map(item => <span key={item}>{item}</span>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Contact */}
+      <section className="home-section" id="contact">
+        <div className="home-contact">
+          <div>
+            <div className="home-kicker">Contact</div>
+            <h2>Have a project or a role in mind?</h2>
+            <p>{PROFILE.contactNote}</p>
+          </div>
+          <div className="home-contact-links">
+            {PROFILE.email && (
+              <a href={`mailto:${PROFILE.email}`} className="home-btn primary"><FaEnvelope /> Email me</a>
+            )}
+            <a href={PROFILE.github} target="_blank" rel="noreferrer"
+              className={`home-btn${PROFILE.email ? '' : ' primary'}`}>
+              <FaGithub /> GitHub
+            </a>
+          </div>
+        </div>
+      </section>
 
       <footer className="home-foot">
-        Built with patience, practice, and curiosity. Total Projects: {projects.length}
+        <span>© {new Date().getFullYear()} {PROFILE.name}</span>
+        <span>Built with patience, practice, and curiosity.</span>
       </footer>
     </div>
   );

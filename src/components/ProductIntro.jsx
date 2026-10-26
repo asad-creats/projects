@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 
 /**
  * ProductIntro — a full-screen, story-style animated walkthrough shown before a
@@ -158,8 +158,10 @@ function usePrefersReducedMotion() {
 }
 
 const STYLE_ID = 'product-intro-styles';
+// Layout effect, not a plain effect: the styles must be in the page before the
+// first paint, or the intro flashes unstyled (a full-size logo) for a frame.
 function useIntroStyles() {
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (document.getElementById(STYLE_ID)) return;
     const el = document.createElement('style');
     el.id = STYLE_ID;
