@@ -282,9 +282,40 @@ function AccountModal({ q, showToast, onClose }) {
             Making a new code cancels the old one.
           </p>
           <button className="btn ghost wide" type="button" disabled={busy} onClick={makeCode}>Create a new recovery code</button>
+          <p className="modal-sub" style={{ margin: "14px 0 0" }}>
+            Someone on your team forgot theirs? Open <b>People</b> and click <b>Reset password</b> next to their name.
+          </p>
         </div>
       )}
     </Modal>
+  );
+}
+
+// Nudges HR admins to make a recovery code, since without one a forgotten
+// password locks them out. The server never reveals whether a code exists, so
+// "has one" is remembered per browser once a code has been shown here.
+const recoveryKey = (id) => `quorum_recovery_ready_${id}`;
+const readFlag = (k) => { try { return !!localStorage.getItem(k); } catch { return false; } };
+const writeFlag = (k) => { try { localStorage.setItem(k, "1"); } catch { /* storage blocked: banner just returns */ } };
+
+function RecoveryReminder({ q }) {
+  const key = recoveryKey(q.me.id);
+  const [hidden, setHidden] = useState(() => readFlag(key));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (q.recoveryCode) { writeFlag(key); setHidden(true); } }, [q.recoveryCode, key]);
+  if (hidden) return null;
+  const create = async () => {
+    setBusy(true);
+    try { await q.actions.newRecoveryCode(); } catch { setBusy(false); }
+  };
+  return (
+    <div className="recovery-banner" role="status">
+      <span>🔑 <b>Set up password recovery.</b> Create a recovery code so you can get back into this HR account if you ever forget your password.</span>
+      <div className="recovery-banner-actions">
+        <button type="button" className="btn sm" disabled={busy} onClick={create}>{busy ? "Creating…" : "Create recovery code"}</button>
+        <button type="button" className="linklike" onClick={() => { writeFlag(key); setHidden(true); }}>I already have one</button>
+      </div>
+    </div>
   );
 }
 
@@ -344,10 +375,13 @@ function Shell({ q, showToast, theme, setTheme, onExit }) {
           ))}
         </div>
         <button className="icon-btn" title="Replay tour" onClick={() => setTourOpen(true)}>?</button>
-        <button className="icon-btn" title="Account & password" aria-label="Account and password" onClick={() => setAccountOpen(true)}>🔑</button>
+        <button className="account-btn" title="Change your password" aria-label="Account and password" onClick={() => setAccountOpen(true)}>
+          🔑<span>Account</span>
+        </button>
         <button className="icon-btn" title="Toggle theme" onClick={toggleTheme}>◐</button>
         <button className="icon-btn" title={q.demo ? "Exit demo" : "Sign out"} onClick={() => q.actions.signOut()}>⏻</button>
       </div>
+      {isHr && <RecoveryReminder q={q} />}
       <main>
         {view === "hr" && isHr && <HRDashboard q={q} showToast={showToast} />}
         {view === "emp" && <EmployeeView q={q} showToast={showToast} />}
