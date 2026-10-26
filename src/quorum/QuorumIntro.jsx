@@ -18,6 +18,33 @@ const TEAM = [
   { n: "Lina Park", i: "LP", c: "#C0468A", load: 5, label: "Has room", tone: ["#3FBE88", "rgba(63,190,136,.15)"] },
 ];
 
+// Opening scene: the whole idea in three plain steps.
+function HowItWorks() {
+  const steps = [
+    ["📝", "A manager adds a task", "“Accessibility audit”"],
+    ["🤝", "The team agrees how long it takes", "3 of 4 people say 3 hours"],
+    ["✅", "Someone with free time does it", "Maya has room today, so she takes it"],
+  ];
+  return (
+    <div className="pi-mock">
+      <div className="pi-mock-h"><span className="pi-dots"><i /><i /><i /></span>How Quorum works</div>
+      {steps.map(([icon, title, sub], k) => (
+        <React.Fragment key={title}>
+          {k > 0 && <div className="pi-in" style={{ width: 2, height: 16, background: ACCENT, opacity: 0.6, margin: "0 0 0 27px", ...d(0.45 + k * 0.9) }} />}
+          <div className="pi-row pi-slide" style={{ marginTop: k ? 0 : 8, ...d(0.2 + k * 0.9) }}>
+            <span className="pi-avatar" style={{ background: "rgba(123,132,255,.18)", fontSize: 17 }}>{icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div><strong>{title}</strong></div>
+              <div className="pi-muted">{sub}</div>
+            </div>
+            <span className="pi-pill pi-pop" style={{ color: ACCENT, background: "rgba(123,132,255,.15)", ...d(0.6 + k * 0.9) }}>Step {k + 1}</span>
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 function Availability() {
   return (
     <div className="pi-mock">
@@ -121,36 +148,44 @@ function MyDay() {
 
 const SCENES = [
   {
-    id: "availability",
-    kicker: "Quorum · for teams",
-    title: "See who has room — at a glance.",
-    body: "Availability is computed from the hours each person has committed today, not from anyone's self-reported status. Spot overload before it happens.",
-    Visual: Availability,
+    id: "what",
+    kicker: "What is Quorum?",
+    title: "A fair way for teams to share out work.",
+    body: "Quorum is a task planner for teams. Instead of a boss guessing how long each job takes, the team agrees on it together, and work goes to whoever has free time.",
+    Visual: HowItWorks,
   },
   {
     id: "consensus",
-    kicker: "Fair estimates",
-    title: "Task hours are agreed by the team.",
-    body: "HR proposes a task, the team votes on its hours, and a majority seals it. No more guessed estimates handed down from above.",
+    kicker: "Step 1 · Agree on the time",
+    title: "The team decides how long a task takes.",
+    body: "When a task is added, everyone suggests how many hours it needs. Once most of the team agrees, that number is locked in.",
     Visual: Consensus,
   },
   {
+    id: "availability",
+    kicker: "Step 2 · Share the load",
+    title: "See who has room, at a glance.",
+    body: "Quorum adds up the hours each person has taken on today, so you can see who is free and who is overloaded before anyone burns out.",
+    Visual: Availability,
+  },
+  {
     id: "ledger",
-    kicker: "Transparent by design",
-    title: "Every decision lands on a tamper-evident ledger.",
-    body: "Each sealed task is a block chained to the one before it, with who voted for it. Anyone can see how an estimate was reached.",
+    kicker: "Step 3 · Keep a record",
+    title: "Every agreement is saved for good.",
+    body: "Each locked-in estimate goes into a permanent log that can't be quietly edited later, so anyone can check how a decision was made.",
     Visual: Ledger,
   },
   {
     id: "myday",
     kicker: "Ready when you are",
-    title: "Run your day with live timers.",
-    body: "Start, pause and finish tasks; log your own work; flag yourself busy. Try it with a sample team — no sign-up — or sign in to your workspace.",
+    title: "Then just get to work.",
+    body: "Start a timer, pause it, and mark tasks done. Try it now with a sample team (no sign-up needed), or sign in to your own workspace.",
     Visual: MyDay,
   },
 ];
 
-export const QUORUM_INTRO_KEY = "quorum_intro_seen_v1";
+// v2: the intro was rewritten with a plain-language opening, so show it again.
+export const QUORUM_INTRO_KEY = "quorum_intro_seen_v2";
 
 export function QuorumIntro({ onDemo, onClose }) {
   return (
