@@ -103,7 +103,7 @@ const keepHyphenated = (text) =>
 
 // Blocks that fade and rise into view on scroll (see the effect in Home).
 const REVEAL_SELECTOR = [
-  ".home-hero-text", ".home-hero-photo", ".home-stats > div", ".home-section-head",
+  ".home-hero-text", ".home-hero-photo", ".home-section-head",
   ".home-about > div", ".home-principle", "#skills > .home-kicker", "#skills > h2",
   ".home-skill-group", ".home-contact",
 ].join(", ");
@@ -335,18 +335,18 @@ function Home() {
             <a href="#work" className="home-btn primary">See my work <FaArrowRight /></a>
             <a href="#about" className="home-btn">About me</a>
           </div>
+          {/* Quick numbers, kept small so the projects start right below the hero */}
+          <dl className="home-stats">
+            <div><dt>projects built</dt><dd>{projects.length}</dd></div>
+            <div><dt>live demos to try</dt><dd>{liveCount}</dd></div>
+            <div><dt>real estate tools</dt><dd>{projects.filter(p => p.group === 'Real Estate').length}</dd></div>
+            <div><dt>tools &amp; technologies</dt><dd>{skillCount}+</dd></div>
+          </dl>
         </div>
         <div className="home-hero-photo">
           <img src="/profile.png" alt={PROFILE.name} className="home-avatar" />
         </div>
       </section>
-
-      <div className="home-stats">
-        <div className="home-stat-feature"><b>{projects.length}</b><span>projects built</span></div>
-        <div><b>{liveCount}</b><span>live demos to try</span></div>
-        <div><b>{projects.filter(p => p.group === 'Real Estate').length}</b><span>real estate tools</span></div>
-        <div><b>{skillCount}+</b><span>tools &amp; technologies</span></div>
-      </div>
 
       {/* Work */}
       <section className="home-section" id="work">

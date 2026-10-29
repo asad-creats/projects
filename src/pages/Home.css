@@ -59,18 +59,19 @@ html{scroll-behavior:smooth}
 .home-wrap a:focus-visible,.home-wrap button:focus-visible,.home-wrap [tabindex]:focus-visible{outline:2px solid var(--h-accent-text);outline-offset:3px}
 
 /* 12-column frame */
-.home-section,.home-hero,.home-stats,.home-foot{max-width:1200px;margin-left:auto;margin-right:auto;
+.home-section,.home-hero,.home-foot{max-width:1200px;margin-left:auto;margin-right:auto;
   padding-left:var(--h-gutter);padding-right:var(--h-gutter)}
-.home-hero,.home-stats,.home-about,.home-principles,.home-skills,.home-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:20px}
+.home-hero,.home-about,.home-principles,.home-skills,.home-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:20px}
 
 .home-section{padding-top:112px;scroll-margin-top:64px}
+#work.home-section{padding-top:72px}
 .home-section h2{text-wrap:balance;margin:0;font-weight:600;font-size:clamp(30px,4vw,46px);line-height:1.08;
   letter-spacing:-.035em;color:var(--h-text)}
 .home-kicker{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;color:var(--h-muted);margin-bottom:14px}
 .home-kicker::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--h-accent-text)}
 
 /* Glass card base */
-.proj-card,.home-stats > div,.home-focus-card,.home-skill-group,.home-contact,.home-about > div:first-child{
+.proj-card,.home-focus-card,.home-skill-group,.home-contact,.home-about > div:first-child{
   background:var(--h-glass);border:1px solid var(--h-line);border-radius:18px;box-shadow:var(--h-shadow);
   -webkit-backdrop-filter:blur(14px) saturate(1.1);backdrop-filter:blur(14px) saturate(1.1)}
 
@@ -92,7 +93,7 @@ html{scroll-behavior:smooth}
 .home-nav-cta:hover{border-color:var(--h-faint);background:var(--h-glass-2)}
 
 /* Hero */
-.home-hero{align-items:end;padding-top:112px;padding-bottom:64px}
+.home-hero{align-items:end;padding-top:104px;padding-bottom:8px}
 .home-hero-text{grid-column:1 / span 9}
 .home-hero-photo{grid-column:10 / span 3;align-self:center;justify-self:end;width:100%;max-width:280px}
 .home-eyebrow{display:inline-flex;align-items:center;gap:10px;padding:6px 13px 6px 11px;border-radius:999px;
@@ -117,17 +118,13 @@ html{scroll-behavior:smooth}
 .home-btn.primary:hover{background:var(--h-accent);filter:brightness(1.06)}
 .home-btn svg{font-size:.85em}
 
-/* Stats — asymmetric bento: one featured metric beside three smaller ones */
-.home-stats{grid-template-rows:auto auto}
-.home-stats > div{padding:24px 26px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;min-height:128px}
-.home-stats > div:nth-child(1){grid-column:span 5;grid-row:span 2}
-.home-stats > div:nth-child(2){grid-column:span 7}
-.home-stats > div:nth-child(3){grid-column:span 4}
-.home-stats > div:nth-child(4){grid-column:span 3}
-.home-stats b{display:block;font-weight:700;font-size:48px;line-height:1;letter-spacing:-.045em;
-  color:var(--h-text);font-variant-numeric:tabular-nums}
-.home-stats .home-stat-feature b{font-size:clamp(84px,10vw,128px);letter-spacing:-.06em;color:var(--h-accent-text)}
-.home-stats span{font-size:14px;font-weight:500;color:var(--h-muted)}
+/* Stats — one slim row under the hero buttons, so the projects follow right after */
+.home-stats{display:flex;flex-wrap:wrap;margin:44px 0 0;padding:20px 0 0;border-top:1px solid var(--h-line)}
+.home-stats > div{display:flex;flex-direction:column-reverse;gap:4px;padding:0 28px;border-left:1px solid var(--h-line)}
+.home-stats > div:first-child{padding-left:0;border-left:0}
+.home-stats dd{margin:0;font-size:30px;font-weight:700;line-height:1;letter-spacing:-.04em;color:var(--h-text);font-variant-numeric:tabular-nums}
+.home-stats > div:first-child dd{color:var(--h-accent-text)}
+.home-stats dt{font-size:13px;font-weight:500;color:var(--h-muted)}
 
 /* Work */
 .home-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:48px}
@@ -229,8 +226,6 @@ html{scroll-behavior:smooth}
   .home-hero{padding-top:64px;align-items:start}
   .home-hero-text{grid-column:1 / -1}
   .home-hero-photo{grid-column:1 / -1;grid-row:1;justify-self:start;max-width:160px}
-  .home-stats > div:nth-child(1){grid-column:span 12;grid-row:auto}
-  .home-stats > div:nth-child(n+2){grid-column:span 4}
   .home-about > div:first-child,.home-focus{grid-column:span 12}
   .home-about > div:first-child{padding:30px}
   .home-principle{grid-column:span 12}
@@ -241,13 +236,14 @@ html{scroll-behavior:smooth}
   .home-nav{gap:10px}
   .home-nav-links{display:none}
   .home-theme{margin-left:auto}
-  .home-hero,.home-stats,.home-about,.home-principles,.home-skills,.home-grid{gap:14px}
+  .home-hero,.home-about,.home-principles,.home-skills,.home-grid{gap:14px}
+  .home-stats{display:grid;grid-template-columns:1fr 1fr;row-gap:18px;margin-top:32px}
+  .home-stats > div,.home-stats > div:first-child{padding:0 0 0 14px;border-left:1px solid var(--h-line)}
+  .home-stats dd{font-size:26px}
+  #work.home-section{padding-top:56px}
   .home-section{padding-top:80px}
   .home-hero p{font-size:16.5px}
   .home-grid > *,.home-skill-group:nth-child(n){grid-column:span 12}
-  .home-stats > div:nth-child(n+2){grid-column:span 12;min-height:0}
-  .home-stats > div{padding:20px}
-  .home-stats b{font-size:44px}
   .home-contact{padding:30px 22px}
   .home-foot{margin-top:80px}
   .proj-card{padding:22px}
