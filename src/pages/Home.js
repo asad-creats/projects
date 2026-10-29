@@ -72,6 +72,23 @@ const LeadRadarLogo = () => (
   </svg>
 );
 
+const PipelineLogo = () => (
+  <svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
+    <defs>
+      <linearGradient id="pipeline-g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#2dd4bf" />
+        <stop offset="1" stopColor="#0f766e" />
+      </linearGradient>
+    </defs>
+    <rect x="1" y="1" width="38" height="38" rx="11" fill="url(#pipeline-g)" />
+    <g fill="#fff">
+      <rect x="11" y="22" width="4.5" height="8" rx="1.5" />
+      <rect x="17.75" y="16" width="4.5" height="14" rx="1.5" />
+      <rect x="24.5" y="11" width="4.5" height="19" rx="1.5" />
+    </g>
+  </svg>
+);
+
 // Display order of the category groups; "Real Estate" leads.
 const GROUP_ORDER = ["Real Estate", "AI & Productivity", "Mobile & Web"];
 
@@ -171,6 +188,17 @@ function Home() {
       category: "Data / Python",
       level: "Full-Stack",
       tech: ["Python", "FastAPI", "SQLite", "Follow Up Boss API", "Charts"],
+    },
+    {
+      title: "Pipeline",
+      description: "Chat-style analytics for real estate teams. Ask about leads, agents or deals in plain English and get the number, a chart and the exact query behind it, then pin answers to a morning board. Front-end demo on sample data.",
+      link: null,
+      externalLink: "/pipeline/",
+      logo: <PipelineLogo />,
+      group: "Real Estate",
+      category: "AI / Analytics",
+      level: "Frontend",
+      tech: ["React", "TypeScript", "Vite", "Charts"],
     },
     {
       title: "Tally",
