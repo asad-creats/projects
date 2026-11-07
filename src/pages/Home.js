@@ -4,7 +4,9 @@ import {
   FaExternalLinkAlt, FaEnvelope, FaRobot, FaHome, FaLayerGroup, FaMoon, FaSun,
 } from "react-icons/fa";
 import { useNavigate } from 'react-router-dom';
+import StyleMenu, { readStyle } from '../components/StyleMenu';
 import './Home.css';
+import './HomeStyles.css';
 
 // Brand logos (inline SVG) for the flagship projects.
 const TallyLogo = () => (
@@ -309,6 +311,10 @@ function Home() {
     try { localStorage.setItem(THEME_KEY, next); } catch { /* storage blocked: just this visit */ }
   };
 
+  // Design style (see StyleMenu). Only Studio has light and dark variants;
+  // the others carry their own palette, so the sun/moon button hides for them.
+  const [designStyle, setDesignStyle] = useState(readStyle);
+
   // Fade-and-rise as blocks scroll into view. Skipped entirely under
   // prefers-reduced-motion, and without IntersectionObserver nothing is hidden.
   const wrapRef = useRef(null);
@@ -331,7 +337,7 @@ function Home() {
   }, []);
 
   return (
-    <div className="home-wrap" ref={wrapRef} data-theme={theme || undefined}>
+    <div className="home-wrap" ref={wrapRef} data-theme={theme || undefined} data-style={designStyle}>
       {/* Top navigation */}
       <header className="home-nav">
         <a href="#top" className="home-brand">
@@ -341,10 +347,13 @@ function Home() {
         <nav className="home-nav-links">
           {NAV.map(n => <a key={n.id} href={`#${n.id}`}>{n.label}</a>)}
         </nav>
-        <button type="button" className="home-theme" onClick={toggleTheme}
-          aria-label={isLight ? 'Switch to dark mode' : 'Switch to light mode'}>
-          {isLight ? <FaMoon /> : <FaSun />}
-        </button>
+        <StyleMenu value={designStyle} onChange={setDesignStyle} />
+        {designStyle === 'studio' && (
+          <button type="button" className="home-theme" onClick={toggleTheme}
+            aria-label={isLight ? 'Switch to dark mode' : 'Switch to light mode'}>
+            {isLight ? <FaMoon /> : <FaSun />}
+          </button>
+        )}
         <a className="home-nav-cta" href={PROFILE.github} target="_blank" rel="noreferrer">
           <FaGithub /> <span>GitHub</span>
         </a>
