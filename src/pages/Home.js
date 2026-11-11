@@ -193,14 +193,14 @@ function Home() {
     },
     {
       title: "Pipeline",
-      description: "Chat-style analytics for real estate teams. Ask about leads, agents or deals in plain English and get the number, a chart and the exact query behind it, then pin answers to a morning board. Front-end demo on sample data.",
+      description: "AI analytics for real estate teams: ask about leads, agents or deals in plain English and an LLM looks the answer up in the CRM data, then replies with the number and a chart. The demo runs a live Postgres database in your browser; sample questions work without a key, or add your own AI key to ask anything.",
       link: null,
       externalLink: "/pipeline/",
       logo: <PipelineLogo />,
       group: "Real Estate",
       category: "AI / Analytics",
-      level: "Frontend",
-      tech: ["React", "TypeScript", "Vite", "Charts"],
+      level: "Full-Stack",
+      tech: ["React", "TypeScript", "LLM tool use", "Postgres", "Supabase"],
     },
     {
       title: "Tally",
